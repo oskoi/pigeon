@@ -9,6 +9,28 @@ The pigeon command generates parsers based on a [parsing expression grammar (PEG
 
 See the [godoc page][3] for detailed usage. Also have a look at the [Pigeon Wiki](https://github.com/mna/pigeon/wiki) for additional information about Pigeon and PEG in general.
 
+## Features for this fork
+
+* Skip all "codeExpr" while looking ahead [issue](https://github.com/mna/pigeon/issues/149), branch feat/skip-code-expr-while-looking-ahead
+
+    * See detail in the issue.
+
+* Remove ParseFile ParseReader, rename Parse and all options to lowercase [issue](https://github.com/mna/pigeon/issues/150), branch feat/rename-exported-api
+
+    * `ParseReader` converts io.Reader to bytes, then invoke `parse`, it don't make sense.
+    * Function `Parse` and all options(`MaxExpressions`,`Entrypoint`,`Statistics`,`Debug`,`Memoize`,`AllowInvalidUTF8`,`Recover`,`GlobalStore`,`InitState`) expose to module user. I think expose them is not a good idea.
+
+* ActionExpr refactored [issue](https://github.com/mna/pigeon/issues/150), branch refactor/actionExpr
+
+    * Only one code expression: I think all code exprs are similar: `actionExpr({})`, `andCodeExpr(&{})`, `notCodeExpr(!{})`, `stateCodeExpr(#{})`, so I removed 3 of 4.
+    * Unlimited ActionExpr(CodeExpr): grammar like `expr <- firstPart:[0-9]+ { fmt.Println(firstPart) }  secondPart:[a-z]+ { fmt.Println(firstPart, secondPart) }` is allowed for this fork.
+    * You can access parser in ActionExpr: `expr <- { fmt.Println(p) }`
+
+* Provide a struct(`ParserCustomData`) to embed, to replace the globalStore
+
+    * Must define a struct `ParserCustomData` in your module.
+    * Access data by `c.data`, for example: `expr <- { fmt.Println(c.data.MyOption) }`
+
 ## Releases
 
 * v1.0.0 is the tagged release of the original implementation.
