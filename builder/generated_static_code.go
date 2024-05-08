@@ -24,39 +24,39 @@ var (
 // the previous setting as an Option.
 type Option func(*parser) Option
 
-// MaxExpressions creates an Option to stop parsing after the provided
+// maxExpressions creates an Option to stop parsing after the provided
 // number of expressions have been parsed, if the value is 0 then the parser will
 // parse for as many steps as needed (possibly an infinite number).
 //
 // The default for maxExprCnt is 0.
-func MaxExpressions(maxExprCnt uint64) Option {
+func maxExpressions(maxExprCnt uint64) Option {
 	return func(p *parser) Option {
 		oldMaxExprCnt := p.maxExprCnt
 		p.maxExprCnt = maxExprCnt
-		return MaxExpressions(oldMaxExprCnt)
+		return maxExpressions(oldMaxExprCnt)
 	}
 }
 
-// Entrypoint creates an Option to set the rule name to use as entrypoint.
+// entrypoint creates an Option to set the rule name to use as entrypoint.
 // The rule name must have been specified in the -alternate-entrypoints
 // if generating the parser with the -optimize-grammar flag, otherwise
 // it may have been optimized out. Passing an empty string sets the
 // entrypoint to the first rule in the grammar.
 //
 // The default is to start parsing at the first rule in the grammar.
-func Entrypoint(ruleName string) Option {
+func entrypoint(ruleName string) Option {
 	return func(p *parser) Option {
 		oldEntrypoint := p.entrypoint
 		p.entrypoint = ruleName
 		if ruleName == "" {
 			p.entrypoint = g.rules[0].name
 		}
-		return Entrypoint(oldEntrypoint)
+		return entrypoint(oldEntrypoint)
 	}
 }
 
 // ==template== {{ if not .Optimize }}
-// Statistics adds a user provided Stats struct to the parser to allow
+// statistics adds a user provided Stats struct to the parser to allow
 // the user to process the results after the parsing has finished.
 // Also the key for the "no match" counter is set.
 //
@@ -73,7 +73,7 @@ func Entrypoint(ruleName string) Option {
 //	    log.Panicln(err)
 //	}
 //	fmt.Println(string(b))
-func Statistics(stats *Stats, choiceNoMatch string) Option {
+func statistics(stats *Stats, choiceNoMatch string) Option {
 	return func(p *parser) Option {
 		oldStats := p.Stats
 		p.Stats = stats
@@ -82,118 +82,93 @@ func Statistics(stats *Stats, choiceNoMatch string) Option {
 		if p.Stats.ChoiceAltCnt == nil {
 			p.Stats.ChoiceAltCnt = make(map[string]map[string]int)
 		}
-		return Statistics(oldStats, oldChoiceNoMatch)
+		return statistics(oldStats, oldChoiceNoMatch)
 	}
 }
 
-// Debug creates an Option to set the debug flag to b. When set to true,
+// debug creates an Option to set the debug flag to b. When set to true,
 // debugging information is printed to stdout while parsing.
 //
 // The default is false.
-func Debug(b bool) Option {
+func debug(b bool) Option {
 	return func(p *parser) Option {
 		old := p.debug
 		p.debug = b
-		return Debug(old)
+		return debug(old)
 	}
 }
 
-// Memoize creates an Option to set the memoize flag to b. When set to true,
+// memoize creates an Option to set the memoize flag to b. When set to true,
 // the parser will cache all results so each expression is evaluated only
 // once. This guarantees linear parsing time even for pathological cases,
 // at the expense of more memory and slower times for typical cases.
 //
 // The default is false.
-func Memoize(b bool) Option {
+func memoize(b bool) Option {
 	return func(p *parser) Option {
 		old := p.memoize
 		p.memoize = b
-		return Memoize(old)
+		return memoize(old)
 	}
 }
 
 // {{ end }} ==template==
 
-// AllowInvalidUTF8 creates an Option to allow invalid UTF-8 bytes.
+// allowInvalidUTF8 creates an Option to allow invalid UTF-8 bytes.
 // Every invalid UTF-8 byte is treated as a utf8.RuneError (U+FFFD)
 // by character class matchers and is matched by the any matcher.
 // The returned matched value, c.text and c.offset are NOT affected.
 //
 // The default is false.
-func AllowInvalidUTF8(b bool) Option {
+func allowInvalidUTF8(b bool) Option {
 	return func(p *parser) Option {
 		old := p.allowInvalidUTF8
 		p.allowInvalidUTF8 = b
-		return AllowInvalidUTF8(old)
+		return allowInvalidUTF8(old)
 	}
 }
 
-// Recover creates an Option to set the recover flag to b. When set to
+// recover creates an Option to set the recover flag to b. When set to
 // true, this causes the parser to recover from panics and convert it
 // to an error. Setting it to false can be useful while debugging to
 // access the full stack trace.
 //
 // The default is true.
-func Recover(b bool) Option {
+func recoverOption(b bool) Option {
 	return func(p *parser) Option {
 		old := p.recover
 		p.recover = b
-		return Recover(old)
+		return recoverOption(old)
 	}
 }
 
-// GlobalStore creates an Option to set a key to a certain value in
+// globalStore creates an Option to set a key to a certain value in
 // the globalStore.
-func GlobalStore(key string, value any) Option {
+func globalStore(key string, value any) Option {
 	return func(p *parser) Option {
 		old := p.cur.globalStore[key]
 		p.cur.globalStore[key] = value
-		return GlobalStore(key, old)
+		return globalStore(key, old)
 	}
 }
 
 // ==template== {{ if or .GlobalState (not .Optimize) }}
 
-// InitState creates an Option to set a key to a certain value in
+// initState creates an Option to set a key to a certain value in
 // the global "state" store.
-func InitState(key string, value any) Option {
+func initState(key string, value any) Option {
 	return func(p *parser) Option {
 		old := p.cur.state[key]
 		p.cur.state[key] = value
-		return InitState(key, old)
+		return initState(key, old)
 	}
 }
 
 // {{ end }} ==template==
 
-// ParseFile parses the file identified by filename.
-func ParseFile(filename string, opts ...Option) (i any, err error) { //{{ if .Nolint }} nolint: deadcode {{else}} ==template== {{ end }}
-	f, err := os.Open(filename)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if closeErr := f.Close(); closeErr != nil {
-			err = closeErr
-		}
-	}()
-	return ParseReader(filename, f, opts...)
-}
-
-// ParseReader parses the data from r using filename as information in the
-// error messages.
-func ParseReader(filename string, r io.Reader, opts ...Option) (any, error) { //{{ if .Nolint }} nolint: deadcode {{else}} ==template== {{ end }}
-	b, err := io.ReadAll(r)
-	if err != nil {
-		return nil, err
-	}
-
-	return Parse(filename, b, opts...)
-}
-
 // Parse parses the data from b using filename as information in the
 // error messages.
-func Parse(filename string, b []byte, opts ...Option) (any, error) {
+func parse(filename string, b []byte, opts ...Option) (any, error) {
 	return newParser(filename, b, opts...).parse(g)
 }
 
