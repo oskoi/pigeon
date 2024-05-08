@@ -1124,6 +1124,9 @@ func (p *parser) parseActionExpr(act *actionExpr) (any, bool) {
 	}
 
 	// {{ end }} ==template==
+	if p.cur.state["skipCode"] == true {
+		return nil, true
+	}
 	start := p.pt
 	val, ok := p.parseExprWrap(act.expr)
 	if ok {
@@ -1157,6 +1160,9 @@ func (p *parser) parseAndCodeExpr(and *andCodeExpr) (any, bool) {
 	}
 
 	// {{ end }} ==template==
+	if p.cur.state["skipCode"] == true {
+		return nil, true
+	}
 	// ==template== {{ if or .GlobalState (not .Optimize) }}
 	state := p.cloneState()
 	// {{ end }} ==template==
@@ -1184,7 +1190,9 @@ func (p *parser) parseAndExpr(and *andExpr) (any, bool) {
 	state := p.cloneState()
 	// {{ end }} ==template==
 	p.pushV()
+	p.cur.state["skipCode"] = true
 	_, ok := p.parseExprWrap(and.expr)
+	delete(p.cur.state, "skipCode")
 	p.popV()
 	// ==template== {{ if or .GlobalState (not .Optimize) }}
 	p.restoreState(state)
@@ -1394,6 +1402,9 @@ func (p *parser) parseNotCodeExpr(not *notCodeExpr) (any, bool) {
 	}
 
 	// {{ end }} ==template==
+	if p.cur.state["skipCode"] == true {
+		return nil, true
+	}
 	// ==template== {{ if or .GlobalState (not .Optimize) }}
 	state := p.cloneState()
 
@@ -1527,6 +1538,9 @@ func (p *parser) parseStateCodeExpr(state *stateCodeExpr) (any, bool) {
 	}
 
 	// {{ end }} ==template==
+	if p.cur.state["skipCode"] == true {
+		return nil, true
+	}
 	err := state.run(p)
 	if err != nil {
 		p.addErr(err)
