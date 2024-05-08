@@ -1268,11 +1268,11 @@ func (p *parser) parseCodeExpr(code *codeExpr) (any, bool) {
 		defer p.out(p.in("parseCodeExpr"))
 	}
 
+	// {{ end }} ==template==
 	if p.cur.state["skipCode"] == true {
 		return nil, true
 	}
 
-	// {{ end }} ==template==
 	val, err := code.run(p)
 	if err != nil {
 		p.addErr(err)
@@ -1318,7 +1318,9 @@ func (p *parser) parseNotExpr(not *notExpr) (any, bool) {
 	// {{ end }} ==template==
 	p.pushV()
 	p.maxFailInvertExpected = !p.maxFailInvertExpected
+	p.cur.state["skipCode"] = true
 	_, ok := p.parseExprWrap(not.expr)
+	delete(p.cur.state, "skipCode")
 	p.maxFailInvertExpected = !p.maxFailInvertExpected
 	p.popV()
 	// ==template== {{ if or .GlobalState (not .Optimize) }}
