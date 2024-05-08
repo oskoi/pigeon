@@ -70,8 +70,6 @@ func set(m map[string]map[string]struct{}, src, dst string) {
 // See Optimize for a detailed list of the performed optimizations.
 func (r *grammarOptimizer) optimize(expr0 Expression) Visitor {
 	switch expr := expr0.(type) {
-	case *ActionExpr:
-		expr.Expr = r.optimizeRule(expr.Expr)
 	case *AndExpr:
 		expr.Expr = r.optimizeRule(expr.Expr)
 	case *ChoiceExpr:
@@ -268,13 +266,6 @@ func (r *grammarOptimizer) optimizeRule(expr Expression) Expression {
 // have to become independent from their original Expression.
 func cloneExpr(expr Expression) Expression {
 	switch expr := expr.(type) {
-	case *ActionExpr:
-		return &ActionExpr{
-			Code:   expr.Code,
-			Expr:   cloneExpr(expr.Expr),
-			FuncIx: expr.FuncIx,
-			p:      expr.p,
-		}
 	case *AndExpr:
 		return &AndExpr{
 			Expr: cloneExpr(expr.Expr),
