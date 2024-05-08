@@ -64,7 +64,7 @@ Labels ← label:IdentifierName labels:( __ "," __ IdentifierName)* {
     return failureLabels, nil
 }
 
-ChoiceExpr ← first:ActionExpr rest:( __ "/" __ ActionExpr )* {
+ChoiceExpr ← first:SeqExpr rest:( __ "/" __ SeqExpr )* {
     restSlice := toAnySlice(rest)
     if len(restSlice) == 0 {
         return first, nil
@@ -77,20 +77,6 @@ ChoiceExpr ← first:ActionExpr rest:( __ "/" __ ActionExpr )* {
         choice.Alternatives = append(choice.Alternatives, sl.([]any)[3].(ast.Expression))
     }
     return choice, nil
-}
-
-ActionExpr ← expr:SeqExpr code:( __ CodeBlock )? {
-    if code == nil {
-        return expr, nil
-    }
-
-    pos := c.astPos()
-    act := ast.NewActionExpr(pos)
-    act.Expr = expr.(ast.Expression)
-    codeSlice := toAnySlice(code)
-    act.Code = codeSlice[1].(*ast.CodeBlock)
-
-    return act, nil
 }
 
 SeqExpr ← first:LabeledExpr rest:( __ LabeledExpr )* {
@@ -156,7 +142,7 @@ SuffixedOp ← ( '?' / '*' / '+' ) {
     return string(c.text), nil
 }
 
-PrimaryExpr ← LitMatcher / CharClassMatcher / AnyMatcher / RuleRefExpr / SemanticPredExpr / "(" __ expr:Expression __ ")" {
+PrimaryExpr ← LitMatcher / CharClassMatcher / AnyMatcher / RuleRefExpr / CodeExpr / "(" __ expr:Expression __ ")" {
     return expr, nil
 }
 RuleRefExpr ← name:IdentifierName !( __ ( StringLiteral __ )? RuleDefOp ) {
@@ -164,33 +150,10 @@ RuleRefExpr ← name:IdentifierName !( __ ( StringLiteral __ )? RuleDefOp ) {
     ref.Name = name.(*ast.Identifier)
     return ref, nil
 }
-SemanticPredExpr ← op:SemanticPredOp __ code:CodeBlock {
-    switch op.(string) {
-    case "#":
-        state := ast.NewStateCodeExpr(c.astPos())
-        state.Code = code.(*ast.CodeBlock)
-        return state, nil
-
-    case "&":
-        and := ast.NewAndCodeExpr(c.astPos())
-        and.Code = code.(*ast.CodeBlock)
-        return and, nil
-
-    case "*":
-        state := ast.NewCustomParserCodeExpr(c.astPos())
-        state.Code = code.(*ast.CodeBlock)
-        return state, nil
-
-    // case "!":
-    default:
-        not := ast.NewNotCodeExpr(c.astPos())
-        not.Code = code.(*ast.CodeBlock)
-        return not, nil
-
-    }
-}
-SemanticPredOp ← ( '#' / '&' / '!' / '*' ) {
-    return string(c.text), nil
+CodeExpr ← __ code:CodeBlock {
+    state := ast.NewCodeExpr(c.astPos())
+    state.Code = code.(*ast.CodeBlock)
+    return state, nil
 }
 
 RuleDefOp ← '=' / "<-" / '\u2190' / '\u27f5'
