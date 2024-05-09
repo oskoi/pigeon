@@ -643,6 +643,18 @@ func (b *builder) writeCodeExprCode(code *ast.CodeExpr) {
 	}
 }
 
+func stringArrayUniq(items []string) []string {
+	var newArray []string
+	m := map[string]bool{}
+	for _, i := range items {
+		if !m[i] {
+			m[i] = true
+			newArray = append(newArray, i)
+		}
+	}
+	return newArray
+}
+
 func (b *builder) writeFunc(funcIx int, code *ast.CodeBlock, callTpl, funcTpl string) {
 	if code == nil {
 		return
@@ -656,8 +668,9 @@ func (b *builder) writeFunc(funcIx int, code *ast.CodeBlock, callTpl, funcTpl st
 	}
 	var args bytes.Buffer
 	ix := len(b.argsStack) - 1
+	argsInfo := stringArrayUniq(b.argsStack[ix])
 	if ix >= 0 {
-		for i, arg := range b.argsStack[ix] {
+		for i, arg := range argsInfo {
 			if i > 0 {
 				args.WriteString(", ")
 			}
@@ -673,7 +686,7 @@ func (b *builder) writeFunc(funcIx int, code *ast.CodeBlock, callTpl, funcTpl st
 
 	args.Reset()
 	if ix >= 0 {
-		for i, arg := range b.argsStack[ix] {
+		for i, arg := range argsInfo {
 			if i > 0 {
 				args.WriteString(", ")
 			}
