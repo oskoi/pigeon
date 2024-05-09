@@ -1088,6 +1088,9 @@ func (p *parser) parseActionExpr(act *actionExpr) (any, bool) {
 	start := p.pt
 	val, ok := p.parseExprWrap(act.expr)
 	if ok {
+		if p.cur.state["skipCode"] == true {
+			return nil, true
+		}
 		p.cur.pos = start.position
 		p.cur.text = p.sliceFrom(start)
 		// ==template== {{ if or .GlobalState (not .Optimize) }}

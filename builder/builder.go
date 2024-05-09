@@ -114,6 +114,7 @@ func BasicLatinLookupTable(basicLatinLookupTable bool) Option {
 func BuildParser(w io.Writer, g *ast.Grammar, opts ...Option) error {
 	b := &builder{w: w, recvName: "c", target: "go"}
 	b.setOptions(opts)
+	b.globalState = true
 	return b.buildParser(g)
 }
 
@@ -342,7 +343,6 @@ func (b *builder) writeCodeExpr(state *ast.CodeExpr) {
 		b.writelnf("nil,")
 		return
 	}
-	b.globalState = true
 	b.writelnf("&codeExpr{")
 	pos := state.Pos()
 	if state.FuncIx == 0 {
