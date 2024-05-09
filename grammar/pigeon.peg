@@ -64,7 +64,7 @@ Labels ← label:IdentifierName labels:( __ "," __ IdentifierName)* {
     return failureLabels, nil
 }
 
-ChoiceExpr ← first:SeqExpr rest:( __ "/" __ SeqExpr )* {
+ChoiceExpr ← first:ActionSeqExpr rest:( __ "/" __ ActionSeqExpr )* {
     restSlice := toAnySlice(rest)
     if len(restSlice) == 0 {
         return first, nil
@@ -77,6 +77,39 @@ ChoiceExpr ← first:SeqExpr rest:( __ "/" __ SeqExpr )* {
         choice.Alternatives = append(choice.Alternatives, sl.([]any)[3].(ast.Expression))
     }
     return choice, nil
+}
+
+ActionSeqExpr ← first:ActionExpr rest:( __ ActionExpr )* {
+    restSlice := toAnySlice(rest)
+    if len(restSlice) == 0 {
+        return first, nil
+    }
+    seq := ast.NewSeqExpr(c.astPos())
+    seq.Exprs = []ast.Expression{first.(ast.Expression)}
+    for _, sl := range restSlice {
+        seq.Exprs = append(seq.Exprs, sl.([]any)[1].(ast.Expression))
+    }
+    return seq, nil
+}
+
+ActionExpr ← expr:SeqExpr code:( __ CodeBlock )? {
+    if code == nil {
+        return expr, nil
+    }
+
+    pos := c.astPos()
+    act := ast.NewActionExpr(pos)
+    act.Expr = expr.(ast.Expression)
+    codeSlice := toAnySlice(code)
+    act.Code = codeSlice[1].(*ast.CodeBlock)
+
+    return act, nil
+} / CodeExpr
+
+CodeExpr ← __ code:CodeBlock {
+    state := ast.NewCodeExpr(c.astPos())
+    state.Code = code.(*ast.CodeBlock)
+    return state, nil
 }
 
 SeqExpr ← first:LabeledExpr rest:( __ LabeledExpr )* {
@@ -142,18 +175,13 @@ SuffixedOp ← ( '?' / '*' / '+' ) {
     return string(c.text), nil
 }
 
-PrimaryExpr ← LitMatcher / CharClassMatcher / AnyMatcher / RuleRefExpr / CodeExpr / "(" __ expr:Expression __ ")" {
+PrimaryExpr ← LitMatcher / CharClassMatcher / AnyMatcher / RuleRefExpr / "(" __ expr:Expression __ ")" {
     return expr, nil
 }
 RuleRefExpr ← name:IdentifierName !( __ ( StringLiteral __ )? RuleDefOp ) {
     ref := ast.NewRuleRefExpr(c.astPos())
     ref.Name = name.(*ast.Identifier)
     return ref, nil
-}
-CodeExpr ← __ code:CodeBlock {
-    state := ast.NewCodeExpr(c.astPos())
-    state.Code = code.(*ast.CodeBlock)
-    return state, nil
 }
 
 RuleDefOp ← '=' / "<-" / '\u2190' / '\u27f5'

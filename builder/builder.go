@@ -193,6 +193,8 @@ func (b *builder) writeRule(r *ast.Rule) {
 func (b *builder) writeExpr(expr ast.Expression) {
 	b.exprIndex++
 	switch expr := expr.(type) {
+	case *ast.ActionExpr:
+		b.writeActionExpr(expr)
 	case *ast.AndExpr:
 		b.writeAndExpr(expr)
 	case *ast.AnyMatcher:
@@ -249,6 +251,22 @@ func (b *builder) writeAnyMatcher(any *ast.AnyMatcher) {
 	b.writelnf("&anyMatcher{")
 	pos := any.Pos()
 	b.writelnf("\tline: %d, col: %d, offset: %d,", pos.Line, pos.Col, pos.Off)
+	b.writelnf("},")
+}
+func (b *builder) writeActionExpr(act *ast.ActionExpr) {
+	if act == nil {
+		b.writelnf("nil,")
+		return
+	}
+	if act.FuncIx == 0 {
+		act.FuncIx = b.exprIndex
+	}
+	b.writelnf("&actionExpr{")
+	pos := act.Pos()
+	b.writelnf("\tpos: position{line: %d, col: %d, offset: %d},", pos.Line, pos.Col, pos.Off)
+	b.writelnf("\trun: (*parser).call%s,", b.funcName(act.FuncIx))
+	b.writef("\texpr: ")
+	b.writeExpr(act.Expr)
 	b.writelnf("},")
 }
 
@@ -559,6 +577,9 @@ func (b *builder) addArg(arg *ast.Identifier) {
 
 func (b *builder) writeExprCode(expr ast.Expression) {
 	switch expr := expr.(type) {
+	case *ast.ActionExpr:
+		b.writeExprCode(expr.Expr)
+		b.writeActionExprCode(expr)
 	case *ast.LabeledExpr:
 		b.addArg(expr.Label)
 		b.pushArgsSet()
@@ -610,6 +631,16 @@ func (b *builder) writeExprCode(expr ast.Expression) {
 		b.pushArgsSet()
 		b.writeExprCode(expr.Expr)
 		b.popArgsSet()
+	}
+}
+
+func (b *builder) writeActionExprCode(act *ast.ActionExpr) {
+	if act == nil {
+		return
+	}
+	if act.FuncIx > 0 {
+		b.writeFunc(act.FuncIx, act.Code, callCodeFuncTemplate, onCodeFuncTemplate)
+		act.FuncIx = 0 // already rendered, prevent duplicates
 	}
 }
 
