@@ -242,6 +242,13 @@ type choiceExpr struct {
 }
 
 // {{ if .Nolint }} nolint: structcheck {{else}} ==template== {{ end }}
+type actionExpr struct {
+	pos  position
+	expr any
+	run  func(*parser) (any, error)
+}
+
+// {{ if .Nolint }} nolint: structcheck {{else}} ==template== {{ end }}
 type recoveryExpr struct {
 	pos          position
 	expr         any
@@ -1033,6 +1040,8 @@ func (p *parser) parseExpr(expr any) (any, bool) {
 	var val any
 	var ok bool
 	switch expr := expr.(type) {
+	case *actionExpr:
+		val, ok = p.parseActionExpr(expr)
 	case *andExpr:
 		val, ok = p.parseAndExpr(expr)
 	case *anyMatcher:
@@ -1066,6 +1075,39 @@ func (p *parser) parseExpr(expr any) (any, bool) {
 	default:
 		panic(fmt.Sprintf("unknown expression type %T", expr))
 	}
+	return val, ok
+}
+
+func (p *parser) parseActionExpr(act *actionExpr) (any, bool) {
+	// ==template== {{ if not .Optimize }}
+	if p.debug {
+		defer p.out(p.in("parseActionExpr"))
+	}
+
+	// {{ end }} ==template==
+	start := p.pt
+	val, ok := p.parseExprWrap(act.expr)
+	if ok {
+		p.cur.pos = start.position
+		p.cur.text = p.sliceFrom(start)
+		// ==template== {{ if or .GlobalState (not .Optimize) }}
+		state := p.cloneState()
+		// {{ end }} ==template==
+		actVal, err := act.run(p)
+		if err != nil {
+			p.addErrAt(err, start.position, []string{})
+		}
+		// ==template== {{ if or .GlobalState (not .Optimize) }}
+		p.restoreState(state)
+		// {{ end }} ==template==
+
+		val = actVal
+	}
+	// ==template== {{ if not .Optimize }}
+	if ok && p.debug {
+		p.printIndent("MATCH", string(p.sliceFrom(start)))
+	}
+	// {{ end }} ==template==
 	return val, ok
 }
 

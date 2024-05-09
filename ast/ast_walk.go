@@ -21,6 +21,8 @@ func Walk(v Visitor, expr Expression) {
 	}
 
 	switch expr := expr.(type) {
+	case *ActionExpr:
+		Walk(v, expr.Expr)
 	case *AndCodeExpr:
 		// Nothing to do
 	case *AndExpr:
