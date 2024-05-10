@@ -245,7 +245,7 @@ type choiceExpr struct {
 type actionExpr struct {
 	pos  position
 	expr any
-	run  func(*parser) (any, error)
+	run  func(*parser) any
 }
 
 // {{ if .Nolint }} nolint: structcheck {{else}} ==template== {{ end }}
@@ -306,7 +306,7 @@ type litMatcher struct {
 // {{ if .Nolint }} nolint: structcheck {{else}} ==template== {{ end }}
 type codeExpr struct {
 	pos position
-	run func(*parser) (any, error)
+	run func(*parser) any
 }
 
 // {{ if .Nolint }} nolint: structcheck {{else}} ==template== {{ end }}
@@ -515,6 +515,8 @@ type parser struct {
 	choiceNoMatch string
 	// recovery expression stack, keeps track of the currently available recovery expression, these are traversed in reverse
 	recoveryStack []map[string]any
+
+	_errPos *position
 }
 
 // push a variable set on the vstack.
@@ -603,7 +605,11 @@ func (p *parser) out(s string) string {
 // {{ end }} ==template==
 
 func (p *parser) addErr(err error) {
-	p.addErrAt(err, p.pt.position, []string{})
+	if p._errPos != nil {
+		p.addErrAt(err, *p._errPos, []string{})
+	} else {
+		p.addErrAt(err, p.pt.position, []string{})
+	}
 }
 
 func (p *parser) addErrAt(err error, pos position, expected []string) {
@@ -1096,10 +1102,9 @@ func (p *parser) parseActionExpr(act *actionExpr) (any, bool) {
 		// ==template== {{ if or .GlobalState (not .Optimize) }}
 		state := p.cloneState()
 		// {{ end }} ==template==
-		actVal, err := act.run(p)
-		if err != nil {
-			p.addErrAt(err, start.position, []string{})
-		}
+		p._errPos = &start.position
+		actVal := act.run(p)
+		p._errPos = nil
 		// ==template== {{ if or .GlobalState (not .Optimize) }}
 		p.restoreState(state)
 		// {{ end }} ==template==
@@ -1318,12 +1323,7 @@ func (p *parser) parseCodeExpr(code *codeExpr) (any, bool) {
 		return nil, true
 	}
 
-	val, err := code.run(p)
-	if err != nil {
-		p.addErr(err)
-		return nil, true
-	}
-	return val, true
+	return code.run(p), true
 }
 
 func (p *parser) parseLitMatcher(lit *litMatcher) (any, bool) {

@@ -11,6 +11,13 @@ See the [godoc page][3] for detailed usage. Also have a look at the [Pigeon Wiki
 
 ## Features for this fork
 
+* `actionExpr` is different
+  * Only needs to return one value. Moreover, this is not required. If the return statement is not written, it will automatically return c.text. Examples:
+    * `expr <- [0-9]+ { fmt.Println(expr) }` is ok in this fork, `return c.text` will be returned.
+    * `expr <- "true" { return 1 }`
+  * If you want to add a error by manual, do this:
+    * `expr <- "if" { p.addErr(errors.New("keyword is not allowed")) }`, equals to `expr <- "if" { return nil, errors.New("keyword is not allowed") }` of original pigeon.
+
 * Skip all "codeExpr" while looking ahead [issue](https://github.com/mna/pigeon/issues/149), branch feat/skip-code-expr-while-looking-ahead
 
     * See detail in the issue.

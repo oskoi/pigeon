@@ -38,11 +38,17 @@ func (b *builder) templateRender(text string, trim bool) string {
 
 // generated function templates
 var (
-	onCodeFuncTemplate = `func (%s *current) %s(p *parser, %s) (any, error) {
+	onCodeFuncTemplate = `func (%s *current) %s(p *parser, %s) any {
 %s
+	;return c.text;
 }
 `
-	callCodeFuncTemplate = `func (p *parser) call%s() (any, error) {
+	onCodeFuncTemplate2 = `func (%s *current) %s(p *parser, %s) any {
+%s
+	;return nil;
+}
+`
+	callCodeFuncTemplate = `func (p *parser) call%s() any {
     stack := p.vstack[len(p.vstack)-1]
     _ = stack
     return p.cur.%[1]s(p, %s)
@@ -669,7 +675,7 @@ func (b *builder) writeCodeExprCode(code *ast.CodeExpr) {
 		return
 	}
 	if code.FuncIx > 0 {
-		b.writeFunc(code.FuncIx, code.Code, callCodeFuncTemplate, onCodeFuncTemplate)
+		b.writeFunc(code.FuncIx, code.Code, callCodeFuncTemplate, onCodeFuncTemplate2)
 		code.FuncIx = 0 // already rendered, prevent duplicates
 	}
 }
