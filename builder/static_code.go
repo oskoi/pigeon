@@ -314,6 +314,18 @@ type ruleRefExpr struct {
 }
 
 // {{ if .Nolint }} nolint: structcheck {{else}} ==template== {{ end }}
+type andCodeExpr struct {
+	pos position
+	run func(*parser) bool
+}
+
+// {{ if .Nolint }} nolint: structcheck {{else}} ==template== {{ end }}
+type notCodeExpr struct {
+	pos position
+	run func(*parser) bool
+}
+
+// {{ if .Nolint }} nolint: structcheck {{else}} ==template== {{ end }}
 type litMatcher struct {
 	pos        position
 	val        string
@@ -1066,6 +1078,8 @@ func (p *parser) parseExpr(expr any) (any, bool) {
 	switch expr := expr.(type) {
 	case *actionExpr:
 		val, ok = p.parseActionExpr(expr)
+	case *andCodeExpr:
+		val, ok = p.parseAndCodeExpr(expr)
 	case *andExpr:
 		val, ok = p.parseAndExpr(expr)
 	case *anyMatcher:
@@ -1080,6 +1094,8 @@ func (p *parser) parseExpr(expr any) (any, bool) {
 		val, ok = p.parseLabeledExpr(expr)
 	case *litMatcher:
 		val, ok = p.parseLitMatcher(expr)
+	case *notCodeExpr:
+		val, ok = p.parseNotCodeExpr(expr)
 	case *notExpr:
 		val, ok = p.parseNotExpr(expr)
 	case *oneOrMoreExpr:
@@ -1135,6 +1151,25 @@ func (p *parser) parseActionExpr(act *actionExpr) (any, bool) {
 	}
 	// {{ end }} ==template==
 	return val, ok
+}
+
+func (p *parser) parseAndCodeExpr(and *andCodeExpr) (any, bool) {
+	// ==template== {{ if not .Optimize }}
+	if p.debug {
+		defer p.out(p.in("parseAndCodeExpr"))
+	}
+
+	// {{ end }} ==template==
+	// ==template== {{ if or .GlobalState (not .Optimize) }}
+	state := p.cloneState()
+	// {{ end }} ==template==
+
+	ok := and.run(p)
+	// ==template== {{ if or .GlobalState (not .Optimize) }}
+	p.restoreState(state)
+	// {{ end }} ==template==
+
+	return nil, ok
 }
 
 func (p *parser) parseAndExpr(and *andExpr) (any, bool) {
@@ -1366,6 +1401,25 @@ func (p *parser) parseLitMatcher(lit *litMatcher) (any, bool) {
 	}
 	p.failAt(true, start.position, lit.want)
 	return p.sliceFrom(start), true
+}
+
+func (p *parser) parseNotCodeExpr(not *notCodeExpr) (any, bool) {
+	// ==template== {{ if not .Optimize }}
+	if p.debug {
+		defer p.out(p.in("parseNotCodeExpr"))
+	}
+
+	// {{ end }} ==template==
+	// ==template== {{ if or .GlobalState (not .Optimize) }}
+	state := p.cloneState()
+
+	// {{ end }} ==template==
+	ok := not.run(p)
+	// ==template== {{ if or .GlobalState (not .Optimize) }}
+	p.restoreState(state)
+	// {{ end }} ==template==
+
+	return nil, !ok
 }
 
 func (p *parser) parseNotExpr(not *notExpr) (any, bool) {

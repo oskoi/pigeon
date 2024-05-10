@@ -18,6 +18,10 @@ See the [godoc page][3] for detailed usage. Also have a look at the [Pigeon Wiki
   * If you want to add a error by manual, do this:
     * `expr <- "if" { p.addErr(errors.New("keyword is not allowed")) }`, equals to `expr <- "if" { return nil, errors.New("keyword is not allowed") }` of original pigeon.
 
+* `andCodeExpr` and `notCodeExpr`:
+  * Like `actionExpr`, return a bool instead of return bool and error
+  * `expr <- &{ return c.data.AllowNumber } [0-9]+`
+
 * Skip all "codeExpr" while looking ahead [issue](https://github.com/mna/pigeon/issues/149), branch feat/skip-code-expr-while-looking-ahead
 
     * See detail in the issue.
@@ -29,9 +33,9 @@ See the [godoc page][3] for detailed usage. Also have a look at the [Pigeon Wiki
 
 * ActionExpr refactored [issue](https://github.com/mna/pigeon/issues/150), branch refactor/actionExpr
 
-    * Only one code expression: I think all code exprs are similar: `actionExpr({})`, `andCodeExpr(&{})`, `notCodeExpr(!{})`, `stateCodeExpr(#{})`, so I removed 3 of 4.
     * Unlimited ActionExpr(CodeExpr): grammar like `expr <- firstPart:[0-9]+ { fmt.Println(firstPart) }  secondPart:[a-z]+ { fmt.Println(firstPart, secondPart) }` is allowed for this fork.
     * You can access parser in ActionExpr: `expr <- { fmt.Println(p) }`
+    * `stateCodeExpr(#{})` was removed.
 
 * Provide a struct(`ParserCustomData`) to embed, to replace the globalStore
 
@@ -120,33 +124,37 @@ func eval(first, rest any) int {
 
 
 Input <- expr:Expr EOF {
-    return expr, nil
+    return expr
 }
 
 Expr <- _ first:Term rest:( _ AddOp _ Term )* _ {
-    return eval(first, rest), nil
+    return eval(first, rest)
 }
 
 Term <- first:Factor rest:( _ MulOp _ Factor )* {
-    return eval(first, rest), nil
+    return eval(first, rest)
 }
 
 Factor <- '(' expr:Expr ')' {
-    return expr, nil
+    return expr
 } / integer:Integer {
-    return integer, nil
+    return integer
 }
 
 AddOp <- ( '+' / '-' ) {
-    return string(c.text), nil
+    return string(c.text)
 }
 
 MulOp <- ( '*' / '/' ) {
-    return string(c.text), nil
+    return string(c.text)
 }
 
 Integer <- '-'? [0-9]+ {
-    return strconv.Atoi(string(c.text))
+    v, err := strconv.Atoi(string(c.text))
+    if err != nil {
+        p.addErr(err)
+    }
+    return v
 }
 
 _ "whitespace" <- [ \n\t\r]*

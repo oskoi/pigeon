@@ -84,3 +84,81 @@ func (s *CodeExpr) IsNullable() bool {
 func (s *CodeExpr) InitialNames() map[string]struct{} {
 	return make(map[string]struct{})
 }
+
+// AndCodeExpr is a zero-length matcher that is considered a match if the
+// code block returns true.
+type AndCodeExpr struct {
+	p      Pos
+	Code   *CodeBlock
+	FuncIx int
+}
+
+var _ Expression = (*AndCodeExpr)(nil)
+
+// NewAndCodeExpr creates a new and (&) code expression at the specified
+// position.
+func NewAndCodeExpr(p Pos) *AndCodeExpr {
+	return &AndCodeExpr{p: p}
+}
+
+// Pos returns the starting position of the node.
+func (a *AndCodeExpr) Pos() Pos { return a.p }
+
+// String returns the textual representation of a node.
+func (a *AndCodeExpr) String() string {
+	return fmt.Sprintf("%s: %T{Code: %v}", a.p, a, a.Code)
+}
+
+// NullableVisit recursively determines whether an object is nullable.
+func (a *AndCodeExpr) NullableVisit(rules map[string]*Rule) bool {
+	return true
+}
+
+// IsNullable returns the nullable attribute of the node.
+func (a *AndCodeExpr) IsNullable() bool {
+	return true
+}
+
+// InitialNames returns names of nodes with which an expression can begin.
+func (a *AndCodeExpr) InitialNames() map[string]struct{} {
+	return make(map[string]struct{})
+}
+
+// NotCodeExpr is a zero-length matcher that is considered a match if the
+// code block returns false.
+type NotCodeExpr struct {
+	p      Pos
+	Code   *CodeBlock
+	FuncIx int
+}
+
+var _ Expression = (*NotCodeExpr)(nil)
+
+// NewNotCodeExpr creates a new not (!) code expression at the specified
+// position.
+func NewNotCodeExpr(p Pos) *NotCodeExpr {
+	return &NotCodeExpr{p: p}
+}
+
+// Pos returns the starting position of the node.
+func (n *NotCodeExpr) Pos() Pos { return n.p }
+
+// String returns the textual representation of a node.
+func (n *NotCodeExpr) String() string {
+	return fmt.Sprintf("%s: %T{Code: %v}", n.p, n, n.Code)
+}
+
+// NullableVisit recursively determines whether an object is nullable.
+func (n *NotCodeExpr) NullableVisit(rules map[string]*Rule) bool {
+	return true
+}
+
+// IsNullable returns the nullable attribute of the node.
+func (n *NotCodeExpr) IsNullable() bool {
+	return true
+}
+
+// InitialNames returns names of nodes with which an expression can begin.
+func (n *NotCodeExpr) InitialNames() map[string]struct{} {
+	return make(map[string]struct{})
+}

@@ -54,6 +54,16 @@ var (
     return p.cur.%[1]s(p, %s)
 }
 `
+	onPredFuncTemplate = `func (%s *current) %s(%s) bool {
+%s
+}
+`
+	callPredFuncTemplate = `func (p *parser) call%s() bool {
+	stack := p.vstack[len(p.vstack)-1]
+	_ = stack
+	return p.cur.%[1]s(%s)
+}
+`
 )
 
 // Option is a function that can set an option on the builder. It returns
@@ -222,6 +232,8 @@ func (b *builder) writeExpr(expr ast.Expression) {
 	switch expr := expr.(type) {
 	case *ast.ActionExpr:
 		b.writeActionExpr(expr)
+	case *ast.AndCodeExpr:
+		b.writeAndCodeExpr(expr)
 	case *ast.AndExpr:
 		b.writeAndExpr(expr)
 	case *ast.AnyMatcher:
@@ -234,6 +246,8 @@ func (b *builder) writeExpr(expr ast.Expression) {
 		b.writeLabeledExpr(expr)
 	case *ast.LitMatcher:
 		b.writeLitMatcher(expr)
+	case *ast.NotCodeExpr:
+		b.writeNotCodeExpr(expr)
 	case *ast.NotExpr:
 		b.writeNotExpr(expr)
 	case *ast.OneOrMoreExpr:
@@ -294,6 +308,21 @@ func (b *builder) writeActionExpr(act *ast.ActionExpr) {
 	b.writelnf("\trun: (*parser).call%s,", b.funcName(act.FuncIx))
 	b.writef("\texpr: ")
 	b.writeExpr(act.Expr)
+	b.writelnf("},")
+}
+
+func (b *builder) writeAndCodeExpr(and *ast.AndCodeExpr) {
+	if and == nil {
+		b.writelnf("nil,")
+		return
+	}
+	b.writelnf("&andCodeExpr{")
+	pos := and.Pos()
+	if and.FuncIx == 0 {
+		and.FuncIx = b.exprIndex
+	}
+	b.writelnf("\tpos: position{line: %d, col: %d, offset: %d},", pos.Line, pos.Col, pos.Off)
+	b.writelnf("\trun: (*parser).call%s,", b.funcName(and.FuncIx))
 	b.writelnf("},")
 }
 
@@ -455,6 +484,21 @@ func (b *builder) writeLitMatcher(lit *ast.LitMatcher) {
 	b.writelnf("},")
 }
 
+func (b *builder) writeNotCodeExpr(not *ast.NotCodeExpr) {
+	if not == nil {
+		b.writelnf("nil,")
+		return
+	}
+	b.writelnf("&notCodeExpr{")
+	pos := not.Pos()
+	if not.FuncIx == 0 {
+		not.FuncIx = b.exprIndex
+	}
+	b.writelnf("\tpos: position{line: %d, col: %d, offset: %d},", pos.Line, pos.Col, pos.Off)
+	b.writelnf("\trun: (*parser).call%s,", b.funcName(not.FuncIx))
+	b.writelnf("},")
+}
+
 func (b *builder) writeNotExpr(not *ast.NotExpr) {
 	if not == nil {
 		b.writelnf("nil,")
@@ -606,11 +650,18 @@ func (b *builder) writeExprCode(expr ast.Expression) {
 	case *ast.ActionExpr:
 		b.writeExprCode(expr.Expr)
 		b.writeActionExprCode(expr)
+
+	case *ast.AndCodeExpr:
+		b.writeAndCodeExprCode(expr)
+
 	case *ast.LabeledExpr:
 		b.addArg(expr.Label)
 		b.pushArgsSet()
 		b.writeExprCode(expr.Expr)
 		b.popArgsSet()
+
+	case *ast.NotCodeExpr:
+		b.writeNotCodeExprCode(expr)
 
 	case *ast.AndExpr:
 		b.pushArgsSet()
@@ -667,6 +718,26 @@ func (b *builder) writeActionExprCode(act *ast.ActionExpr) {
 	if act.FuncIx > 0 {
 		b.writeFunc(act.FuncIx, act.Code, callCodeFuncTemplate, onCodeFuncTemplate)
 		act.FuncIx = 0 // already rendered, prevent duplicates
+	}
+}
+
+func (b *builder) writeAndCodeExprCode(and *ast.AndCodeExpr) {
+	if and == nil {
+		return
+	}
+	if and.FuncIx > 0 {
+		b.writeFunc(and.FuncIx, and.Code, callPredFuncTemplate, onPredFuncTemplate)
+		and.FuncIx = 0 // already rendered, prevent duplicates
+	}
+}
+
+func (b *builder) writeNotCodeExprCode(not *ast.NotCodeExpr) {
+	if not == nil {
+		return
+	}
+	if not.FuncIx > 0 {
+		b.writeFunc(not.FuncIx, not.Code, callPredFuncTemplate, onPredFuncTemplate)
+		not.FuncIx = 0 // already rendered, prevent duplicates
 	}
 }
 

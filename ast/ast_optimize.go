@@ -335,12 +335,6 @@ func cloneExpr(expr Expression) Expression {
 			Exprs: exprs,
 			p:     expr.p,
 		}
-	case *StateCodeExpr:
-		return &StateCodeExpr{
-			p:      expr.p,
-			Code:   expr.Code,
-			FuncIx: expr.FuncIx,
-		}
 	case *ZeroOrMoreExpr:
 		return &ZeroOrMoreExpr{
 			Expr: cloneExpr(expr.Expr),
