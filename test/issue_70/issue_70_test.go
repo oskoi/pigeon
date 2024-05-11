@@ -5,8 +5,8 @@ import (
 	"regexp"
 	"testing"
 
-	optimized "github.com/mna/pigeon/test/issue_70/optimized"
-	optimizedgrammar "github.com/mna/pigeon/test/issue_70/optimized-grammar"
+	optimized "github.com/fy0/pigeon/test/issue_70/optimized"
+	optimizedgrammar "github.com/fy0/pigeon/test/issue_70/optimized-grammar"
 )
 
 func TestOptimizeGrammar(t *testing.T) {

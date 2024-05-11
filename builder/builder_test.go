@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mna/pigeon/bootstrap"
+	"github.com/fy0/pigeon/bootstrap"
 )
 
 var grammar = `

@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"github.com/mna/pigeon/ast"
+	"github.com/fy0/pigeon/ast"
 )
 
 var invalidParseCases = map[string]string{

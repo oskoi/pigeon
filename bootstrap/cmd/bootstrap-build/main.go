@@ -12,8 +12,8 @@ import (
 
 	"golang.org/x/tools/imports"
 
-	"github.com/mna/pigeon/bootstrap"
-	"github.com/mna/pigeon/builder"
+	"github.com/fy0/pigeon/bootstrap"
+	"github.com/fy0/pigeon/builder"
 )
 
 func main() {

@@ -8,7 +8,7 @@ import (
 	"os"
 	"unicode"
 
-	"github.com/mna/pigeon/ast"
+	"github.com/fy0/pigeon/ast"
 )
 
 // Scanner tokenizes an input source for the PEG grammar.

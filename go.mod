@@ -1,4 +1,4 @@
-module github.com/mna/pigeon
+module github.com/fy0/pigeon
 
 go 1.20
 

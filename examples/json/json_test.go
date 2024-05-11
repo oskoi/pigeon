@@ -7,8 +7,8 @@ import (
 	"reflect"
 	"testing"
 
-	optimized "github.com/mna/pigeon/examples/json/optimized"
-	optimizedgrammar "github.com/mna/pigeon/examples/json/optimized-grammar"
+	optimized "github.com/fy0/pigeon/examples/json/optimized"
+	optimizedgrammar "github.com/fy0/pigeon/examples/json/optimized-grammar"
 )
 
 func TestCmpStdlib(t *testing.T) {

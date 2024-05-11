@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mna/pigeon/ast"
-	"github.com/mna/pigeon/bootstrap"
-	"github.com/mna/pigeon/builder"
+	"github.com/fy0/pigeon/ast"
+	"github.com/fy0/pigeon/bootstrap"
+	"github.com/fy0/pigeon/builder"
 )
 
 func TestLeftRecursive(t *testing.T) {

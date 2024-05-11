@@ -7,7 +7,7 @@ import (
 	"testing"
 	"unicode"
 
-	"github.com/mna/pigeon/builder"
+	"github.com/fy0/pigeon/builder"
 )
 
 func TestParseNoRule(t *testing.T) {

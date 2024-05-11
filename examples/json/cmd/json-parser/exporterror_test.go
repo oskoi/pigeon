@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/mna/pigeon/examples/json"
+	"github.com/fy0/pigeon/examples/json"
 
 	"strings"
 )

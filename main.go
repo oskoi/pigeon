@@ -13,8 +13,8 @@ import (
 
 	"golang.org/x/tools/imports"
 
-	"github.com/mna/pigeon/ast"
-	"github.com/mna/pigeon/builder"
+	"github.com/fy0/pigeon/ast"
+	"github.com/fy0/pigeon/builder"
 )
 
 // exit function mockable for tests
@@ -216,6 +216,7 @@ the generated code is written to this file instead.
 		add support left recursion (EXPERIMENTAL FEATURE)
 
 See https://godoc.org/github.com/mna/pigeon for more information.
+This version is a fork: https://github.com/fy0/pigeon
 `
 
 // usage prints the help page of the command-line tool.
