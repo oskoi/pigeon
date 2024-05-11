@@ -423,6 +423,7 @@ func newParser(filename string, b []byte, opts ...Option) *parser {
 		Stats:           &stats,
 		// start rule is rule [0] unless an alternate entrypoint is specified
 		entrypoint: g.rules[0].name,
+		scStack: []bool{false},
 	}
 	p.setOptions(opts)
 
@@ -443,6 +444,10 @@ func (p *parser) setOptions(opts []Option) {
 	for _, opt := range opts {
 		opt(p)
 	}
+}
+
+func (p *parser) checkSkipCode() bool {
+	return p.scStack[len(p.scStack)-1]
 }
 
 // {{ if .Nolint }} nolint: structcheck,deadcode {{else}} ==template== {{ end }}
@@ -533,6 +538,8 @@ type parser struct {
 	recoveryStack []map[string]any
 
 	_errPos *position
+	// skip code stack
+	scStack []bool
 }
 
 // push a variable set on the vstack.
@@ -1118,7 +1125,7 @@ func (p *parser) parseActionExpr(act *actionExpr) (any, bool) {
 	start := p.pt
 	val, ok := p.parseExprWrap(act.expr)
 	if ok {
-		if p.cur.state["skipCode"] == true {
+		if p.checkSkipCode() {
 			return nil, true
 		}
 		p.cur.pos = start.position
@@ -1174,9 +1181,11 @@ func (p *parser) parseAndExpr(and *andExpr, logical bool) (any, bool) {
 	state := p.cloneState()
 	// {{ end }} ==template==
 	p.pushV()
-	p.cur.state["skipCode"] = true
+
+	p.scStack = append(p.scStack, true)
 	_, ok := p.parseExprWrap(and.expr)
-	delete(p.cur.state, "skipCode")
+	p.scStack = p.scStack[:len(p.scStack)-1]
+
 	matchedOffset := p.pt.offset
 	p.popV()
 	// ==template== {{ if or .GlobalState (not .Optimize) }}
@@ -1355,9 +1364,9 @@ func (p *parser) parseLabeledExpr(lab *labeledExpr) (any, bool) {
 	if lab.textCapture {
 		// state := p.cloneState()
 		p.pushV()
-		//p.cur.state["skipCode"] = true
+		// p.scStack = append(p.scStack, true)
 		val, ok = p.parseExprWrap(lab.expr)
-		//delete(p.cur.state, "skipCode")
+		// p.scStack = p.scStack[:len(p.scStack)-1]
 		p.popV()
 		// p.restoreState(state)
 	} else {
@@ -1383,7 +1392,7 @@ func (p *parser) parseCodeExpr(code *codeExpr) (any, bool) {
 	}
 
 	// {{ end }} ==template==
-	if !code.notSkip && p.cur.state["skipCode"] == true {
+	if !code.notSkip && p.checkSkipCode() {
 		return nil, true
 	}
 
@@ -1446,9 +1455,11 @@ func (p *parser) parseNotExpr(not *notExpr, logical bool) (any, bool) {
 	// {{ end }} ==template==
 	p.pushV()
 	p.maxFailInvertExpected = !p.maxFailInvertExpected
-	p.cur.state["skipCode"] = true
+
+	p.scStack = append(p.scStack, true)
 	_, ok := p.parseExprWrap(not.expr)
-	delete(p.cur.state, "skipCode")
+	p.scStack = p.scStack[:len(p.scStack)-1]
+
 	p.maxFailInvertExpected = !p.maxFailInvertExpected
 	p.popV()
 	matchedOffset := p.pt.offset

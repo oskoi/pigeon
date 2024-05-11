@@ -130,7 +130,7 @@ func BasicLatinLookupTable(basicLatinLookupTable bool) Option {
 func BuildParser(w io.Writer, g *ast.Grammar, opts ...Option) error {
 	b := &builder{w: w, recvName: "c", target: "go"}
 	b.setOptions(opts)
-	b.globalState = true
+	b.globalState = false
 	return b.buildParser(g)
 }
 
