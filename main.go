@@ -118,7 +118,7 @@ func main() {
 
 	if !*noBuildFlag {
 		if *optimizeGrammar {
-			ast.Optimize(grammar, altEntrypointsFlag...)
+			// ast.Optimize(grammar, altEntrypointsFlag...)
 		}
 
 		// generate parser

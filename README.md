@@ -49,6 +49,8 @@ See the [godoc page][3] for detailed usage. Also have a look at the [Pigeon Wiki
     * Must define a struct `ParserCustomData` in your module.
     * Access data by `c.data`, for example: `expr <- { fmt.Println(c.data.MyOption) }`
 
+* `-optimize-grammar` not available.
+
 ## Releases
 
 * v1.0.0 is the tagged release of the original implementation.
