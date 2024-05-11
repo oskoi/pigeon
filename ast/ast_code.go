@@ -50,9 +50,10 @@ func (a *ActionExpr) InitialNames() map[string]struct{} {
 
 // CodeExpr supports custom parser.
 type CodeExpr struct {
-	p      Pos
-	Code   *CodeBlock
-	FuncIx int
+	p       Pos
+	Code    *CodeBlock
+	FuncIx  int
+	NotSkip bool
 }
 
 var _ Expression = (*CodeExpr)(nil)

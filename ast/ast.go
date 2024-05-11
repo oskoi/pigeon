@@ -361,9 +361,10 @@ func (s *SeqExpr) InitialNames() map[string]struct{} {
 // can access the value of the expression using that label, that becomes
 // a local variable in the code.
 type LabeledExpr struct {
-	p     Pos
-	Label *Identifier
-	Expr  Expression
+	p           Pos
+	Label       *Identifier
+	Expr        Expression
+	TextCapture bool
 }
 
 var _ Expression = (*LabeledExpr)(nil)
@@ -398,9 +399,11 @@ func (l *LabeledExpr) InitialNames() map[string]struct{} {
 
 // AndExpr is a zero-length matcher that is considered a match if the
 // expression it contains is a match.
+// If Logical is true, return false when match empty string
 type AndExpr struct {
-	p    Pos
-	Expr Expression
+	p       Pos
+	Expr    Expression
+	Logical bool
 }
 
 // NewAndExpr creates a new and (&) expression at the specified position.
@@ -435,9 +438,11 @@ func (a *AndExpr) InitialNames() map[string]struct{} {
 
 // NotExpr is a zero-length matcher that is considered a match if the
 // expression it contains is not a match.
+// If Logical is true, return false when match empty string
 type NotExpr struct {
-	p    Pos
-	Expr Expression
+	p       Pos
+	Expr    Expression
+	Logical bool
 }
 
 var _ Expression = (*NotExpr)(nil)

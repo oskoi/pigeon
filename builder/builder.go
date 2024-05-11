@@ -276,7 +276,11 @@ func (b *builder) writeAndExpr(and *ast.AndExpr) {
 		b.writelnf("nil,")
 		return
 	}
-	b.writelnf("&andExpr{")
+	if and.Logical {
+		b.writelnf("&andLogicalExpr{")
+	} else {
+		b.writelnf("&andExpr{")
+	}
 	pos := and.Pos()
 	b.writelnf("\tpos: position{line: %d, col: %d, offset: %d},", pos.Line, pos.Col, pos.Off)
 	b.writef("\texpr: ")
@@ -385,6 +389,9 @@ func (b *builder) writeCodeExpr(state *ast.CodeExpr) {
 	}
 	b.writelnf("\tpos: position{line: %d, col: %d, offset: %d},", pos.Line, pos.Col, pos.Off)
 	b.writelnf("\trun: (*parser).call%s,", b.funcName(state.FuncIx))
+	if state.NotSkip {
+		b.writelnf("\tnotSkip: %v,", state.NotSkip)
+	}
 	b.writelnf("},")
 }
 
@@ -459,6 +466,9 @@ func (b *builder) writeLabeledExpr(lab *ast.LabeledExpr) {
 	}
 	b.writef("\texpr: ")
 	b.writeExpr(lab.Expr)
+	if lab.TextCapture {
+		b.writelnf("\ttextCapture: %v,", lab.TextCapture)
+	}
 	b.writelnf("},")
 }
 
@@ -504,7 +514,11 @@ func (b *builder) writeNotExpr(not *ast.NotExpr) {
 		b.writelnf("nil,")
 		return
 	}
-	b.writelnf("&notExpr{")
+	if not.Logical {
+		b.writelnf("&notLogicalExpr{")
+	} else {
+		b.writelnf("&notExpr{")
+	}
 	pos := not.Pos()
 	b.writelnf("\tpos: position{line: %d, col: %d, offset: %d},", pos.Line, pos.Col, pos.Off)
 	b.writef("\texpr: ")

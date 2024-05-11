@@ -14,13 +14,20 @@ See the [godoc page][3] for detailed usage. Also have a look at the [Pigeon Wiki
 * `actionExpr` is different
   * Only needs to return one value. Moreover, this is not required. If the return statement is not written, it will automatically return c.text. Examples:
     * `expr <- [0-9]+ { fmt.Println(expr) }` is ok in this fork, `return c.text` will be returned.
-    * `expr <- "true" { return 1 }`
+    * `expr <- "true" { return 1 }` also works.
   * If you want to add a error by manual, do this:
     * `expr <- "if" { p.addErr(errors.New("keyword is not allowed")) }`, equals to `expr <- "if" { return nil, errors.New("keyword is not allowed") }` of original pigeon.
 
 * `andCodeExpr` and `notCodeExpr`:
-  * Like `actionExpr`, return a bool instead of return bool and error
-  * `expr <- &{ return c.data.AllowNumber } [0-9]+`
+    * Like `actionExpr`, return a bool instead of return bool and error
+    * `expr <- &{ return c.data.AllowNumber } [0-9]+`
+
+* String capture:
+    * `expr <- val:<anotherExpr> { fmt.Println(val.(string)) }`
+    * `expr <- val:<(A '=' B)> { fmt.Println(val.(string)) }`
+
+* Logical `and` / `or` match:
+    * `expr <- &&testExpr testExpr` // if testExpr return ok but matched nothing (e.g. testExpr <- 'A'*), `&&testEpr` returns false.
 
 * Skip all "codeExpr" while looking ahead [issue](https://github.com/mna/pigeon/issues/149), branch feat/skip-code-expr-while-looking-ahead
 

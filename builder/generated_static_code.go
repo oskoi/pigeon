@@ -273,6 +273,7 @@ type labeledExpr struct {
 	pos   position
 	label string
 	expr  any
+	textCapture bool
 }
 
 // {{ if .Nolint }} nolint: structcheck {{else}} ==template== {{ end }}
@@ -284,6 +285,8 @@ type expr struct {
 type (
 	andExpr        expr //{{ if .Nolint }} nolint: structcheck {{else}} ==template== {{ end }}
 	notExpr        expr //{{ if .Nolint }} nolint: structcheck {{else}} ==template== {{ end }}
+	andLogicalExpr expr //{{ if .Nolint }} nolint: structcheck {{else}} ==template== {{ end }}
+	notLogicalExpr expr //{{ if .Nolint }} nolint: structcheck {{else}} ==template== {{ end }}
 	zeroOrOneExpr  expr //{{ if .Nolint }} nolint: structcheck {{else}} ==template== {{ end }}
 	zeroOrMoreExpr expr //{{ if .Nolint }} nolint: structcheck {{else}} ==template== {{ end }}
 	oneOrMoreExpr  expr //{{ if .Nolint }} nolint: structcheck {{else}} ==template== {{ end }}
@@ -319,6 +322,7 @@ type litMatcher struct {
 type codeExpr struct {
 	pos position
 	run func(*parser) any
+	notSkip bool
 }
 
 // {{ if .Nolint }} nolint: structcheck {{else}} ==template== {{ end }}
@@ -1063,7 +1067,9 @@ func (p *parser) parseExpr(expr any) (any, bool) {
 	case *andCodeExpr:
 		val, ok = p.parseAndCodeExpr(expr)
 	case *andExpr:
-		val, ok = p.parseAndExpr(expr)
+		val, ok = p.parseAndExpr(expr, false)
+	case *andLogicalExpr:
+		val, ok = p.parseAndExpr((*andExpr)(expr), true)
 	case *anyMatcher:
 		val, ok = p.parseAnyMatcher(expr)
 	case *charClassMatcher:
@@ -1079,7 +1085,9 @@ func (p *parser) parseExpr(expr any) (any, bool) {
 	case *notCodeExpr:
 		val, ok = p.parseNotCodeExpr(expr)
 	case *notExpr:
-		val, ok = p.parseNotExpr(expr)
+		val, ok = p.parseNotExpr(expr, false)
+	case *notLogicalExpr:
+		val, ok = p.parseNotExpr((*notExpr)(expr), true)
 	case *oneOrMoreExpr:
 		val, ok = p.parseOneOrMoreExpr(expr)
 	case *recoveryExpr:
@@ -1154,7 +1162,7 @@ func (p *parser) parseAndCodeExpr(and *andCodeExpr) (any, bool) {
 	return nil, ok
 }
 
-func (p *parser) parseAndExpr(and *andExpr) (any, bool) {
+func (p *parser) parseAndExpr(and *andExpr, logical bool) (any, bool) {
 	// ==template== {{ if not .Optimize }}
 	if p.debug {
 		defer p.out(p.in("parseAndExpr"))
@@ -1169,12 +1177,16 @@ func (p *parser) parseAndExpr(and *andExpr) (any, bool) {
 	p.cur.state["skipCode"] = true
 	_, ok := p.parseExprWrap(and.expr)
 	delete(p.cur.state, "skipCode")
+	matchedOffset := p.pt.offset
 	p.popV()
 	// ==template== {{ if or .GlobalState (not .Optimize) }}
 	p.restoreState(state)
 	// {{ end }} ==template==
 	p.restore(pt)
 
+	if logical {
+		return nil, ok && p.pt.offset != matchedOffset
+	}
 	return nil, ok
 }
 
@@ -1337,12 +1349,29 @@ func (p *parser) parseLabeledExpr(lab *labeledExpr) (any, bool) {
 	}
 
 	// {{ end }} ==template==
-	p.pushV()
-	val, ok := p.parseExprWrap(lab.expr)
-	p.popV()
+	start := p.pt
+	var val any
+	var ok bool
+	if lab.textCapture {
+		// state := p.cloneState()
+		p.pushV()
+		//p.cur.state["skipCode"] = true
+		val, ok = p.parseExprWrap(lab.expr)
+		//delete(p.cur.state, "skipCode")
+		p.popV()
+		// p.restoreState(state)
+	} else {
+		p.pushV()
+		val, ok = p.parseExprWrap(lab.expr)
+		p.popV()
+	}
 	if ok && lab.label != "" {
 		m := p.vstack[len(p.vstack)-1]
-		m[lab.label] = val
+		if lab.textCapture {
+			m[lab.label] = string(p.sliceFrom(start))
+		} else {
+			m[lab.label] = val
+		}
 	}
 	return val, ok
 }
@@ -1354,7 +1383,7 @@ func (p *parser) parseCodeExpr(code *codeExpr) (any, bool) {
 	}
 
 	// {{ end }} ==template==
-	if p.cur.state["skipCode"] == true {
+	if !code.notSkip && p.cur.state["skipCode"] == true {
 		return nil, true
 	}
 
@@ -1404,7 +1433,7 @@ func (p *parser) parseNotCodeExpr(not *notCodeExpr) (any, bool) {
 	return nil, !ok
 }
 
-func (p *parser) parseNotExpr(not *notExpr) (any, bool) {
+func (p *parser) parseNotExpr(not *notExpr, logical bool) (any, bool) {
 	// ==template== {{ if not .Optimize }}
 	if p.debug {
 		defer p.out(p.in("parseNotExpr"))
@@ -1422,11 +1451,15 @@ func (p *parser) parseNotExpr(not *notExpr) (any, bool) {
 	delete(p.cur.state, "skipCode")
 	p.maxFailInvertExpected = !p.maxFailInvertExpected
 	p.popV()
+	matchedOffset := p.pt.offset
 	// ==template== {{ if or .GlobalState (not .Optimize) }}
 	p.restoreState(state)
 	// {{ end }} ==template==
 	p.restore(pt)
 
+	if logical {
+		return nil, ok && p.pt.offset != matchedOffset
+	}
 	return nil, !ok
 }
 
