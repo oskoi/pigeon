@@ -37,8 +37,8 @@ func maxExpressions(maxExprCnt uint64) Option {
 	}
 }
 
-// entrypoint creates an Option to set the rule name to use as entrypoint.
-// The rule name must have been specified in the -alternate-entrypoints
+// entrypoint creates an Option to set the rule exprType to use as entrypoint.
+// The rule exprType must have been specified in the -alternate-entrypoints
 // if generating the parser with the -optimize-grammar flag, otherwise
 // it may have been optimized out. Passing an empty string sets the
 // entrypoint to the first rule in the grammar.
@@ -286,6 +286,23 @@ type ruleRefExpr struct {
 }
 
 // {{ if .Nolint }} nolint: structcheck {{else}} ==template== {{ end }}
+type ruleIRefExpr struct {
+	// ==template== {{ if .SetRulePos }}
+	pos position
+	// {{ end }} ==template==
+	index int
+}
+
+// {{ if .Nolint }} nolint: structcheck {{else}} ==template== {{ end }}
+type ruleIRefExprX struct {
+	// ==template== {{ if .SetRulePos }}
+	pos position
+	// {{ end }} ==template==
+	index int
+	call func(p*parser, expr any) (any, bool)
+}
+
+// {{ if .Nolint }} nolint: structcheck {{else}} ==template== {{ end }}
 type andCodeExpr struct {
 	// ==template== {{ if .SetRulePos }}
 	pos position
@@ -466,11 +483,11 @@ type Stats struct {
 	// These numbers allow to optimize the order of the ordered choice expression
 	// to increase the performance of the parser
 	//
-	// The outer key of ChoiceAltCnt is composed of the name of the rule as well
+	// The outer key of ChoiceAltCnt is composed of the exprType of the rule as well
 	// as the line and the column of the ordered choice.
 	// The inner key of ChoiceAltCnt is the number (one-based) of the matching alternative.
 	// For each alternative the number of matches are counted. If an ordered choice does not
-	// match, a special counter is incremented. The name of this counter is set with
+	// match, a special counter is incremented. The exprType of this counter is set with
 	// the parser option Statistics.
 	// For an alternative to be included in ChoiceAltCnt, it has to match at least once.
 	ChoiceAltCnt map[string]map[string]int
@@ -508,6 +525,7 @@ type parser struct {
 
 	// rules table, maps the rule identifier to the rule node
 	rules map[string]*rule
+	rulesArray []*rule
 	// variables stack, map of label to value
 	vstack []map[string]any
 	// rule stack, allows identification of the current rule in errors
@@ -743,6 +761,7 @@ func (p *parser) parse(grammar map[string]*rule) (val any, err error) {
 	if grammar == nil {
 		grammar = g
 	}
+	p.rulesArray = grammar
 	p.rules = g
 
 	if p.recover {
@@ -804,7 +823,8 @@ func (p *parser) parse(grammar map[string]*rule) (val any, err error) {
 	return val, p.errs.err()
 }
 
-// {{else}}
+// {{ end }} ==template==
+// {{ if not .GrammarMap }}
 
 func (p *parser) buildRulesTable(g *grammar) {
 	p.rules = make(map[string]*rule, len(g.rules))
@@ -824,6 +844,7 @@ func (p *parser) parse(grammar *grammar) (val any, err error) {
 	}
 
 	// TODO : not super critical but this could be generated
+	p.rulesArray = grammar.rules
 	p.buildRulesTable(grammar)
 
 	if p.recover {
@@ -1107,6 +1128,14 @@ func (p *parser) parseExpr(expr any) (any, bool) {
 		val, ok = p.parseRecoveryExpr(expr)
 	case *ruleRefExpr:
 		val, ok = p.parseRuleRefExpr(expr)
+	// {{ if .IRefEnable }}
+	case *ruleIRefExpr:
+		val, ok = p.parseRuleIRefExpr(expr)
+	// {{ end }} ==template==
+	// {{ if .IRefCodeEnable }}
+	case *ruleIRefExprX:
+		val, ok = p.parseRuleIRefExprX(expr)
+	// {{ end }} ==template==
 	case *seqExpr:
 		val, ok = p.parseSeqExpr(expr)
 	case *throwExpr:
@@ -1488,10 +1517,6 @@ func (p *parser) parseRuleRefExpr(ref *ruleRefExpr) (any, bool) {
 	}
 
 	// {{ end }} ==template==
-	if ref.name == "" {
-		panic(fmt.Sprintf("invalid rule: missing name"))
-	}
-
 	rule := p.rules[ref.name]
 	if rule == nil {
 		p.addErr(fmt.Errorf("undefined rule: %s", ref.name))
@@ -1499,6 +1524,18 @@ func (p *parser) parseRuleRefExpr(ref *ruleRefExpr) (any, bool) {
 	}
 	return p.parseRuleWrap(rule)
 }
+
+// {{ if .IRefEnable }}
+func (p *parser) parseRuleIRefExpr(ref *ruleIRefExpr) (any, bool) {
+	return p.parseRuleWrap(p.rulesArray[ref.index])
+}
+// {{ end }} ==template==
+
+// {{ if .IRefCodeEnable }}
+func (p *parser) parseRuleIRefExprX(ref *ruleIRefExprX) (any, bool) {
+	return ref.call(p, p.rulesArray[ref.index])
+}
+// {{ end }} ==template==
 
 func (p *parser) parseSeqExpr(seq *seqExpr) (any, bool) {
 	// ==template== {{ if not .Optimize }}

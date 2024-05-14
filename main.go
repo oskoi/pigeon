@@ -47,11 +47,14 @@ func main() {
 		noRecoverFlag          = fs.Bool("no-recover", false, "do not recover from panic")
 		outputFlag             = fs.String("o", "", "output file, defaults to stdout")
 		optimizeBasicLatinFlag = fs.Bool("optimize-basic-latin", false, "generate optimized parser for Unicode Basic Latin character sets")
-		optimizeGrammar        = fs.Bool("optimize-grammar", false, "optimize the given grammar (EXPERIMENTAL FEATURE)")
 		optimizeParserFlag     = fs.Bool("optimize-parser", false, "generate optimized parser without Debug and Memoize options")
 		recvrNmFlag            = fs.String("receiver-name", "c", "receiver name for the generated methods")
 		noBuildFlag            = fs.Bool("x", false, "do not build, only parse")
 		supportLeftRecursion   = fs.Bool("support-left-recursion", false, "add support left recursion (EXPERIMENTAL FEATURE)")
+
+		optimizeRefExprByIndex = fs.Bool("optimize-ref-expr-by-index", false, "generate optimized parser grammar find RefExpr by index (~10% increased)")
+
+		//optimizeGrammar        = fs.Bool("optimize-grammar", false, "optimize the given grammar (EXPERIMENTAL FEATURE)")
 
 		altEntrypointsFlag ruleNamesFlag
 	)
@@ -117,9 +120,9 @@ func main() {
 	}
 
 	if !*noBuildFlag {
-		if *optimizeGrammar {
-			// ast.Optimize(grammar, altEntrypointsFlag...)
-		}
+		//if *optimizeGrammar {
+		// ast.Optimize(grammar, altEntrypointsFlag...)
+		//}
 
 		// generate parser
 		out := output(*outputFlag)
@@ -138,9 +141,11 @@ func main() {
 		basicLatinOptimize := builder.BasicLatinLookupTable(*optimizeBasicLatinFlag)
 		nolintOpt := builder.Nolint(*nolint)
 		leftRecursionSupporter := builder.SupportLeftRecursion(*supportLeftRecursion)
+		refExprByIndex := builder.OptimizeRefExprByIndex(*optimizeRefExprByIndex)
+
 		if err := builder.BuildParser(
 			outBuf, grammar, curNmOpt, optimizeParser, basicLatinOptimize,
-			nolintOpt, leftRecursionSupporter); err != nil {
+			nolintOpt, leftRecursionSupporter, refExprByIndex); err != nil {
 			fmt.Fprintln(os.Stderr, "build error: ", err)
 			exit(5)
 		}
@@ -198,8 +203,8 @@ the generated code is written to this file instead.
 		write the generated parser to OUTPUT_FILE. Defaults to stdout.
 	-optimize-basic-latin
 		generate optimized parser for Unicode Basic Latin character set
-	-optimize-grammar
-		perform several performance optimizations on the grammar (EXPERIMENTAL FEATURE)
+	-optimize-ref-expr-by-index
+		generate optimized parser grammar find RefExpr by index (~10%% performance increased, cause more git line diff)
 	-optimize-parser
 		generate optimized parser without Debug and Memoize options and
 		with some other optimizations applied.
@@ -212,8 +217,6 @@ the generated code is written to this file instead.
 		comma-separated list of rule names that may be used as alternate
 		entrypoints for the parser, in addition to the first rule in the
 		grammar.
-	-support-left-recursion
-		add support left recursion (EXPERIMENTAL FEATURE)
 
 See https://godoc.org/github.com/mna/pigeon for more information.
 This version is a fork: https://github.com/fy0/pigeon

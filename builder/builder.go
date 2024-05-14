@@ -69,7 +69,15 @@ var (
 // the previous setting as an Option.
 type Option func(*builder) Option
 
-// ReceiverName returns an option that specifies the receiver name to
+func OptimizeRefExprByIndex(enable bool) Option {
+	return func(b *builder) Option {
+		prev := b.iRefEnable
+		b.iRefEnable = enable
+		return OptimizeRefExprByIndex(prev)
+	}
+}
+
+// ReceiverName returns an option that specifies the receiver exprType to
 // use for the current struct (which is the struct on which all code blocks
 // except the initializer are generated).
 func ReceiverName(nm string) Option {
@@ -154,6 +162,11 @@ type builder struct {
 	rangeTable bool
 	grammarMap bool
 	entrypoint string
+
+	iRefEnable     bool
+	iRefCodeEnable bool
+
+	ruleName2Index map[string]*ExprInfo
 }
 
 func (b *builder) setOptions(opts []Option) {
@@ -199,6 +212,16 @@ func (b *builder) writeInit(init *ast.CodeBlock) {
 func (b *builder) writeGrammar(g *ast.Grammar) {
 	// transform the ast grammar to the self-contained, no dependency version
 	// of the parser-generator grammar.
+
+	m := map[string]*ExprInfo{}
+
+	for index, r := range g.Rules {
+		info := b.getExprInfo(r.Expr)
+		info.index = index
+		m[r.Name.Val] = info
+	}
+	b.ruleName2Index = m
+
 	b.writelnf("var g = &grammar {")
 	b.writelnf("\trules: []*rule{")
 	for _, r := range g.Rules {
@@ -252,6 +275,55 @@ func (b *builder) writeRule(r *ast.Rule) {
 		b.writelnf("\tleftRecursive: %t,", r.LeftRecursive)
 	}
 	b.writelnf("},")
+}
+
+type ExprInfo struct {
+	index    int
+	name     string
+	exprType string
+}
+
+func (b *builder) getExprInfo(expr ast.Expression) *ExprInfo {
+	switch expr.(type) {
+	case *ast.ActionExpr:
+		return &ExprInfo{exprType: "actionExpr"}
+	case *ast.AndCodeExpr:
+		return &ExprInfo{exprType: "andCodeExpr"}
+	case *ast.AndExpr:
+		return &ExprInfo{exprType: "andExpr"}
+	case *ast.AnyMatcher:
+		return &ExprInfo{exprType: "anyMatcher"}
+	case *ast.CharClassMatcher:
+		return &ExprInfo{exprType: "charClassMatcher"}
+	case *ast.ChoiceExpr:
+		return &ExprInfo{exprType: "choiceExpr"}
+	case *ast.LabeledExpr:
+		return &ExprInfo{exprType: "labeledExpr"}
+	case *ast.LitMatcher:
+		return &ExprInfo{exprType: "litMatcher"}
+	case *ast.NotCodeExpr:
+		return &ExprInfo{exprType: "notCodeExpr"}
+	case *ast.NotExpr:
+		return &ExprInfo{exprType: "notExpr"}
+	case *ast.OneOrMoreExpr:
+		return &ExprInfo{exprType: "oneOrMoreExpr"}
+	case *ast.RecoveryExpr:
+		return &ExprInfo{exprType: "recoveryExpr"}
+	case *ast.RuleRefExpr:
+		return &ExprInfo{exprType: "ruleRefExpr"}
+	case *ast.SeqExpr:
+		return &ExprInfo{exprType: "seqExpr"}
+	case *ast.CodeExpr:
+		return &ExprInfo{exprType: "codeExpr"}
+	case *ast.ThrowExpr:
+		return &ExprInfo{exprType: "throwExpr"}
+	case *ast.ZeroOrMoreExpr:
+		return &ExprInfo{exprType: "zeroOrMoreExpr"}
+	case *ast.ZeroOrOneExpr:
+		return &ExprInfo{exprType: "zeroOrOneExpr"}
+	default:
+		return nil
+	}
 }
 
 func (b *builder) writeExpr(expr ast.Expression) {
@@ -591,13 +663,37 @@ func (b *builder) writeRuleRefExpr(ref *ast.RuleRefExpr) {
 		b.writelnf("nil,")
 		return
 	}
-	b.writef("&ruleRefExpr{")
-	pos := ref.Pos()
-	b.writeRulePos(pos)
-	if ref.Name != nil && ref.Name.Val != "" {
-		b.writef("\tname: %q,", ref.Name.Val)
+	if b.iRefEnable {
+		if b.iRefCodeEnable {
+			b.writef("&ruleIRefExprX{")
+		} else {
+			b.writef("&ruleIRefExpr{")
+		}
+		pos := ref.Pos()
+		b.writeRulePos(pos)
+		if ref.Name != nil && ref.Name.Val != "" {
+			info := b.ruleName2Index[ref.Name.Val]
+			b.writef("\tindex: %d /* %s */", info.index, ref.Name.Val)
+
+			if b.iRefCodeEnable {
+				exprType := info.exprType
+				if exprType == "ruleRefExpr" {
+					exprType = "ruleIRefExprX"
+				}
+				parseFnName := "parse" + strings.ToUpper(exprType[:1]) + exprType[1:]
+				b.writef(", call: func(p*parser, expr any) (any, bool) { return p.%s(expr.(*rule).expr.(*%s)) }", parseFnName, exprType)
+			}
+		}
+		b.writelnf("},")
+	} else {
+		b.writef("&ruleRefExpr{")
+		pos := ref.Pos()
+		b.writeRulePos(pos)
+		if ref.Name != nil && ref.Name.Val != "" {
+			b.writef("\tname: %q,", ref.Name.Val)
+		}
+		b.writelnf("},")
 	}
-	b.writelnf("},")
 }
 
 func (b *builder) writeSeqExpr(seq *ast.SeqExpr) {
@@ -858,6 +954,8 @@ func (b *builder) writeStaticCode() {
 		SetRulePos            bool
 		Entrypoint            string
 		GrammarMap            bool
+		IRefEnable            bool
+		IRefCodeEnable        bool
 	}{
 		Optimize:              b.optimize,
 		BasicLatinLookupTable: b.basicLatinLookupTable,
@@ -866,6 +964,8 @@ func (b *builder) writeStaticCode() {
 		SetRulePos:            false,
 		Entrypoint:            b.entrypoint,
 		GrammarMap:            b.grammarMap,
+		IRefEnable:            b.iRefEnable,
+		IRefCodeEnable:        b.iRefCodeEnable,
 	}
 	t := template.Must(template.New("static_code").Parse(staticCode))
 

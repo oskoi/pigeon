@@ -15,9 +15,13 @@ See the [godoc page][3] for detailed usage. Also have a look at the [Pigeon Wiki
     * `parser.state` is removed, because it's very slow.
     * `parseSeqExpr` only collect not nil values now. Mainly for performance improvement. For example: `e <- Expr __ Plus __ Expr` returns \[expr, '+', expr], original version return \[expr, nil, '+', nil, expr].
 
+* `-optimize-ref-expr-by-index` Option
+    * A option to tweak `RefExpr` the most usually used expr in parser.
+    * About ~10% faster with this option.
+
 * `actionExpr` is different
   * Only needs to return one value. Moreover, this is not required. If the return statement is not written, it will automatically return c.text. Examples:
-    * `expr <- [0-9]+ { fmt.Println(expr) }` is ok in this fork, `return c.text` will be returned.
+    * `expr <- [0-9]+ { fmt.Println(expr) }` is ok in this fork, `nil` will be returned if you don't return something.
     * `expr <- "true" { return 1 }` also works.
   * If you want to add a error by manual, do this:
     * `expr <- "if" { p.addErr(errors.New("keyword is not allowed")) }`, equals to `expr <- "if" { return nil, errors.New("keyword is not allowed") }` of original pigeon.
@@ -103,6 +107,8 @@ Given the following grammar:
 ```
 {
 // part of the initializer code block omitted for brevity
+type ParserCustomData struct {
+}
 
 var ops = map[string]func(int, int) int {
     "+": func(l, r int) int {
@@ -206,3 +212,11 @@ The [BSD 3-Clause license][4]. See the LICENSE file.
 [4]: http://opensource.org/licenses/BSD-3-Clause
 [5]: https://github.com/breml
 [6]: https://github.com/mna
+
+
+## TODO
+* performance: Create another version of `parseOneOrMoreExpr/parseZeroOrMoreExpr` which not collect results. Choose expr decide by is labeled, A bit faster.
+* performance: Remove `pushV` and `popV`, a bit faster.
+* performance: In `parseCharClassMatcher`, variable `start` can be removed in most case. Lot of of small memory pieces allocated.
+* performance: Remove Wrap function if they are not needed.
+* performance: Too many any, can we remove `parseExpr`?
