@@ -11,6 +11,10 @@ See the [godoc page][3] for detailed usage. Also have a look at the [Pigeon Wiki
 
 ## Features for this fork
 
+* Performance tweak, 10-20x faster than original version(with some trade off).
+    * `parser.state` is removed, because it's very slow.
+    * `parseSeqExpr` only collect not nil values now. Mainly for performance improvement. For example: `e <- Expr __ Plus __ Expr` returns \[expr, '+', expr], original version return \[expr, nil, '+', nil, expr].
+
 * `actionExpr` is different
   * Only needs to return one value. Moreover, this is not required. If the return statement is not written, it will automatically return c.text. Examples:
     * `expr <- [0-9]+ { fmt.Println(expr) }` is ok in this fork, `return c.text` will be returned.
@@ -50,6 +54,10 @@ See the [godoc page][3] for detailed usage. Also have a look at the [Pigeon Wiki
     * Access data by `c.data`, for example: `expr <- { fmt.Println(c.data.MyOption) }`
 
 * `-optimize-grammar` not available.
+
+* `position` of generated code is removed 
+    * It produced a lot of different for version control.
+    * You can keep it by set `SetRulePos` to true and rebuild.
 
 ## Releases
 
