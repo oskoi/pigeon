@@ -49,8 +49,7 @@ func main() {
 		recvrNmFlag        = fs.String("receiver-name", "c", "receiver name for the generated methods")
 		noBuildFlag        = fs.Bool("x", false, "do not build, only parse")
 
-		cacheFlag            = fs.Bool("cache", false, "cache parsing results")
-		supportLeftRecursion = fs.Bool("support-left-recursion", false, "add support left recursion (EXPERIMENTAL FEATURE)")
+		cacheFlag = fs.Bool("cache", false, "cache parsing results")
 
 		// runFuncPrefixFlag = fs.String("run-func-prefix", "", "set prefix for generated function name: `(*parser).call_onXXX`. For multiple peg files")
 		// grammarOnlyFlag        = fs.Bool("grammar-only", false, "use it when you have multiple peg files")
@@ -141,12 +140,11 @@ func main() {
 		curNmOpt := builder.ReceiverName(*recvrNmFlag)
 		optimizeParser := builder.Optimize(*optimizeParserFlag)
 		nolintOpt := builder.Nolint(*nolint)
-		leftRecursionSupporter := builder.SupportLeftRecursion(*supportLeftRecursion)
 		refExprByIndex := builder.OptimizeRefExprByIndex(*optimizeRefExprByIndex)
 
 		if err := builder.BuildParser(
 			outBuf, grammar, curNmOpt, optimizeParser,
-			nolintOpt, leftRecursionSupporter, refExprByIndex); err != nil {
+			nolintOpt, refExprByIndex); err != nil {
 			fmt.Fprintln(os.Stderr, "build error: ", err)
 			exit(5)
 		}

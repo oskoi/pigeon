@@ -184,11 +184,6 @@ type rule struct {
 	name        string
 	displayName string
 	expr        any
-
-	// ==template== {{ if .LeftRecursion }}
-	leader        bool
-	leftRecursive bool
-	// {{ end }} ==template==
 }
 
 // {{ if .Nolint }} nolint: structcheck {{else}} ==template== {{ end }}
@@ -482,14 +477,6 @@ type Stats struct {
 	ChoiceAltCnt map[string]map[string]int
 }
 
-// ==template== {{ if .LeftRecursion }}
-type ruleWithExpsStack struct {
-	rule   *rule
-	estack []any
-}
-
-// {{ end }} ==template==
-
 // {{ if .Nolint }} nolint: structcheck,maligned {{else}} ==template== {{ end }}
 type parser struct {
 	filename string
@@ -506,7 +493,7 @@ type parser struct {
 
 	memoize bool
 	// {{ end }} ==template==
-	// ==template== {{ if or .LeftRecursion (not .Optimize) }}
+	// ==template== {{ if not .Optimize }}
 	// memoization table for the packrat algorithm:
 	// map[offset in source] map[expression or rule] {value, match}
 	memo map[int]map[any]resultTuple
@@ -723,7 +710,7 @@ func (p *parser) sliceFromOffset(offset int) []byte {
 	return p.data[offset:p.pt.position.offset]
 }
 
-// ==template== {{ if or .LeftRecursion (not .Optimize) }}
+// ==template== {{ if not .Optimize }}
 func (p *parser) getMemoized(node any) (resultTuple, bool) {
 	if len(p.memo) == 0 {
 		return resultTuple{}, false
@@ -913,60 +900,6 @@ func listJoin(list []string, sep string, lastSep string) string {
 	}
 }
 
-// ==template== {{ if .LeftRecursion }}
-
-func (p *parser) parseRuleRecursiveLeader(rule *rule) (any, bool) {
-	result, ok := p.getMemoized(rule)
-	if ok {
-		p.restore(result.end)
-		return result.v, result.b
-	}
-
-	// ==template== {{ if not .Optimize }}
-	if p.debug {
-		defer p.out(p.in("recursive " + rule.name))
-	}
-	// {{ end }} ==template==
-
-	var (
-		depth      = 0
-		startMark  = p.pt
-		lastResult = resultTuple{nil, false, startMark}
-		lastErrors = *p.errs
-	)
-
-	for {
-		p.setMemoized(startMark, rule, lastResult)
-		val, ok := p.parseRule(rule)
-		endMark := p.pt
-		// ==template== {{ if not .Optimize }}
-		if p.debug {
-			p.printIndent("RECURSIVE", fmt.Sprintf(
-				"Rule %s depth %d: %t -> %s",
-				rule.name, depth, ok, string(p.sliceFrom(startMark))))
-		}
-		// {{ end }} ==template==
-		if (!ok) || (endMark.offset <= lastResult.end.offset && depth != 0) {
-			*p.errs = lastErrors
-			break
-		}
-		lastResult = resultTuple{val, ok, endMark}
-		lastErrors = *p.errs
-		p.restore(startMark)
-		depth++
-	}
-
-	p.restore(lastResult.end)
-	p.setMemoized(startMark, rule, lastResult)
-	return lastResult.v, lastResult.b
-}
-
-func (p *parser) parseRuleRecursiveNoLeader(rule *rule) (any, bool) {
-	return p.parseRule(rule)
-}
-
-// {{ end }} ==template==
-
 // ==template== {{ if not .Optimize }}
 func (p *parser) parseRuleMemoize(rule *rule) (any, bool) {
 	res, ok := p.getMemoized(rule)
@@ -999,31 +932,9 @@ func (p *parser) parseRuleWrap(rule *rule) (any, bool) {
 		// {{ end }} ==template==
 	)
 
-	// ==template== {{ if and .LeftRecursion (not .Optimize) }}
-	if p.memoize || rule.leftRecursive {
-		if rule.leader {
-			val, ok = p.parseRuleRecursiveLeader(rule)
-		} else if p.memoize && !rule.leftRecursive {
-			val, ok = p.parseRuleMemoize(rule)
-		} else {
-			val, ok = p.parseRuleRecursiveNoLeader(rule)
-		}
-	} else {
-		val, ok = p.parseRule(rule)
-	}
-	// {{ else if not .Optimize }}
+	// {{ if not .Optimize }}
 	if p.memoize {
 		val, ok = p.parseRuleMemoize(rule)
-	} else {
-		val, ok = p.parseRule(rule)
-	}
-	// {{ else if .LeftRecursion }}
-	if rule.leftRecursive {
-		if rule.leader {
-			val, ok = p.parseRuleRecursiveLeader(rule)
-		} else {
-			val, ok = p.parseRuleRecursiveNoLeader(rule)
-		}
 	} else {
 		val, ok = p.parseRule(rule)
 	}
@@ -1063,12 +974,7 @@ func (p *parser) parseExprWrap(expr any) (any, bool) {
 	// ==template== {{ if not .Optimize }}
 	var pt savepoint
 
-	// ==template== {{ if .LeftRecursion }}
-	isLeftRecursion := p.rstack[len(p.rstack)-1].leftRecursive
-	if p.memoize && !isLeftRecursion {
-	// {{ else }}
 	if p.memoize {
-	// {{ end }} ==template==
 		res, ok := p.getMemoized(expr)
 		if ok {
 			p.restore(res.end)
@@ -1081,11 +987,7 @@ func (p *parser) parseExprWrap(expr any) (any, bool) {
 	val, ok := p.parseExpr(expr)
 
 	// ==template== {{ if not .Optimize }}
-	// ==template== {{ if .LeftRecursion }}
-	if p.memoize && !isLeftRecursion {
-	// {{ else }}
 	if p.memoize {
-	// {{ end }} ==template==
 		p.setMemoized(pt, expr, resultTuple{val, ok, p.pt})
 	}
 	// {{ end }} ==template==

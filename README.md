@@ -15,8 +15,7 @@ See the [godoc page][3] for detailed usage. Also have a look at the [Pigeon Wiki
   * `parser.state` is removed, because it's very slow.
   * `parseSeqExpr` only collect not nil values now. Mainly for performance improvement. For example: `e <- Expr __ Plus __ Expr` returns \[expr, '+', expr], original version return \[expr, nil, '+', nil, expr].
   * Generated parser has less memory allocated.
-
-* Generated parser uses fewer lines of code.
+  * Generated parser uses fewer lines of code.
 
 * `actionExpr` is different
   * Only needs to return one value. Moreover, this is not required. If the return statement is not written, it will automatically return c.text. Examples:
@@ -36,8 +35,9 @@ See the [godoc page][3] for detailed usage. Also have a look at the [Pigeon Wiki
 * Logical `and` / `or` match:
   * `expr <- &&testExpr testExpr` // if testExpr return ok but matched nothing (e.g. testExpr <- 'A'*), `&&testEpr` returns false.
 
-* Skip all "codeExpr" while looking ahead [issue](https://github.com/mna/pigeon/issues/149), branch feat/skip-code-expr-while-looking-ahead
+* Skip "actionExpr" while looking ahead [issue](https://github.com/mna/pigeon/issues/149), branch feat/skip-code-expr-while-looking-ahead
   * See detail in the issue.
+  * `*{}` / `&{}` / `!{}` won't skip.
 
 * Remove ParseFile ParseReader, rename Parse and all options to lowercase [issue](https://github.com/mna/pigeon/issues/150), branch feat/rename-exported-api
   * `ParseReader` converts io.Reader to bytes, then invoke `parse`, it don't make sense.
@@ -52,15 +52,22 @@ See the [godoc page][3] for detailed usage. Also have a look at the [Pigeon Wiki
   * Must define a struct `ParserCustomData` in your module.
   * Access data by `c.data`, for example: `expr <- { fmt.Println(c.data.MyOption) }`
 
-* `-optimize-grammar` not available.
-
 * `position` of generated code is removed 
   * It produced a lot of different for version control.
   * You can keep it by set `SetRulePos` to true and rebuild.
 
-* `-optimize-ref-expr-by-index` option
+* Added `-optimize-ref-expr-by-index` option
   * An option to tweak `RefExpr` the most usually used expr in parser.
   * About ~10% faster with this option.
+
+* Removed `-support-left-recursion` option
+  * It's not used much, so I removed it to make maintenance easier
+
+* Removed `-optimize-grammar` option
+  * There are bugs present and the effects are not significant.
+
+* Removed `-optimize-basic-latin` option
+  * Because there is no evidence to suggest that this is an optimization
 
 ## Releases
 

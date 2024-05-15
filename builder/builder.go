@@ -91,16 +91,6 @@ func Optimize(optimize bool) Option {
 	}
 }
 
-// SupportLeftRecursion returns an option that specifies the supportLeftRecursion option.
-// If supportLeftRecursion is true, LeftRecursion code is added to the resulting parser.
-func SupportLeftRecursion(support bool) Option {
-	return func(b *builder) Option {
-		prev := b.supportLeftRecursion
-		b.supportLeftRecursion = support
-		return SupportLeftRecursion(prev)
-	}
-}
-
 // Nolint returns an option that specifies the nolint option
 // If nolint is true, special '// nolint: ...' comments are added
 // to the generated parser to suppress warnings by gometalinter or golangci-lint.
@@ -126,12 +116,11 @@ type builder struct {
 	err error
 
 	// options
-	recvName             string
-	optimize             bool
-	globalState          bool
-	nolint               bool
-	supportLeftRecursion bool
-	haveLeftRecursion    bool
+	recvName          string
+	optimize          bool
+	globalState       bool
+	nolint            bool
+	haveLeftRecursion bool
 
 	ruleName  string
 	exprIndex int
@@ -159,7 +148,7 @@ func (b *builder) buildParser(grammar *ast.Grammar) error {
 	if err != nil {
 		return fmt.Errorf("incorrect grammar: %w", err)
 	}
-	if !b.supportLeftRecursion && haveLeftRecursion {
+	if haveLeftRecursion {
 		return fmt.Errorf("incorrect grammar: %w", ErrHaveLeftRecursion)
 	}
 	b.haveLeftRecursion = haveLeftRecursion
@@ -925,7 +914,6 @@ func (b *builder) writeStaticCode() {
 	buffer := bytes.NewBufferString("")
 	params := struct {
 		Optimize       bool
-		LeftRecursion  bool
 		Nolint         bool
 		SetRulePos     bool
 		Entrypoint     string
@@ -936,7 +924,6 @@ func (b *builder) writeStaticCode() {
 		ParseExprName  string
 	}{
 		Optimize:       b.optimize,
-		LeftRecursion:  b.haveLeftRecursion,
 		Nolint:         b.nolint,
 		SetRulePos:     false,
 		Entrypoint:     b.entrypoint,
