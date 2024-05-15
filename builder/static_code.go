@@ -140,7 +140,7 @@ func memoize(b bool) option {
 // Parse parses the data from b using filename as information in the
 // error messages.
 func parse(filename string, b []byte, opts ...option) (any, error) {
-	return newParser(filename, b, opts...).parse(g)
+	return newParser(filename, b, opts...).parse({{ .GrammarVarName }})
 }
 
 // position records a position in the text.
@@ -741,10 +741,9 @@ func (p *parser) setMemoized(pt savepoint, node any, tuple resultTuple) {
 
 func (p *parser) parse(grammar map[string]*rule) (val any, err error) {
 	if grammar == nil {
-		grammar = g
+		grammar = {{ .GrammarVarName }}
 	}
-	p.rulesArray = grammar
-	p.rules = g
+	p.rules = grammar
 
 	if p.recover {
 		// panic can be used in action code to stop parsing immediately
@@ -817,14 +816,13 @@ func (p *parser) buildRulesTable(g *grammar) {
 // {{ if .Nolint }} nolint: gocyclo {{else}} ==template== {{ end }}
 func (p *parser) parse(grammar *grammar) (val any, err error) {
 	if grammar == nil {
-		grammar = g
+		grammar = {{ .GrammarVarName }}
 	}
-	if len(g.rules) == 0 {
+	if len(grammar.rules) == 0 {
 		p.addErr(errNoRule)
 		return nil, p.errs.err()
 	}
 
-	// TODO : not super critical but this could be generated
 	p.rulesArray = grammar.rules
 	p.buildRulesTable(grammar)
 
@@ -1086,7 +1084,7 @@ func (p *parser) parseActionExpr(act *actionExpr) (any, bool) {
 	}
 	// ==template== {{ if not .Optimize }}
 	if ok && p.debug {
-		p.printIndent("MATCH", string(p.sliceFrom(start)))
+		p.printIndent("MATCH", string(p.sliceFrom(&p.spStack.data[p.spStack.index+1])))
 	}
 	// {{ end }} ==template==
 	return val, ok
@@ -1220,7 +1218,8 @@ func (p *parser) parseCharClassMatcher(chr *charClassMatcher) (any, bool) {
 // ==template== {{ if not .Optimize }}
 
 func (p *parser) incChoiceAltCnt(ch *choiceExpr, altI int) {
-	choiceIdent := fmt.Sprintf("%s %d:%d", p.rstack[len(p.rstack)-1].name, ch.pos.line, ch.pos.col)
+	// choiceIdent := fmt.Sprintf("%s %d:%d", p.rstack[len(p.rstack)-1].name, ch.pos.line, ch.pos.col)
+	choiceIdent := fmt.Sprintf("%s", p.rstack[len(p.rstack)-1].name)
 	m := p.ChoiceAltCnt[choiceIdent]
 	if m == nil {
 		m = make(map[string]int)

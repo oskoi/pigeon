@@ -1,5 +1,6 @@
 /*
 Command pigeon generates parsers in Go from a PEG grammar.
+This version is a fork: https://github.com/fy0/pigeon
 
 From Wikipedia [0]:
 
@@ -46,28 +47,6 @@ The following options can be specified:
 	-o=FILE : string, output file where the generated parser will be
 	written (default: stdout).
 
-	-optimize-basic-latin : boolean, if set, a lookup table for the first 128
-	characters of the Unicode table (Basic Latin) is generated for each character
-	class matcher. This speeds up the parsing, if parsed data mainly consists
-	of characters from this range (default: false).
-
-	-optimize-grammar : boolean, (EXPERIMENTAL FEATURE) if set, several performance
-	optimizations on the grammar are performed, with focus to the reduction of the
-	grammar depth.
-	Optimization:
-		* removal of unreferenced rules
-		* replace rule references with a copy of the referenced Rule, if the
-		  referenced rule it self has no references.
-		* resolve nested choice expressions
-		* resolve choice expressions with only one alternative
-		* resolve nested sequences expression
-		* resolve sequence expressions with only one element
-		* combine character class matcher and literal matcher, where possible
-	The resulting grammar is usually more memory consuming, but faster for parsing.
-	The optimization of the grammar is done in multiple rounds (optimize until no
-	more optimizations have applied). This process takes some time, depending on the
-	optimization potential of the grammar.
-
 	-optimize-parser : boolean, if set, the options Debug, Memoize and Statistics are
 	removed	from the resulting parser. The global "state" is optimized as well by
 	either removing all related code if no state change expression is present in the
@@ -89,12 +68,6 @@ The following options can be specified:
 	Entrypoint option that specifies the alternate rule name to use. This is only
 	necessary if the -optimize-parser flag is set, as some rules may be optimized
 	out of the resulting parser.
-
-	-support-left-recursion : boolean, (EXPERIMENTAL FEATURE) if set, add support
-	for left recursion rules, including those with indirect recursion
-	(default: false).
-	E.g.:
-		expr = expr '*' term / expr '+' term
 
 If the code blocks in the grammar (see below, section "Code block") are golint-
 and go vet-compliant, then the resulting generated code will also be golint-

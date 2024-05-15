@@ -36,7 +36,8 @@ func (b *builder) templateRenderBase(text string, trim bool, m map[string]any) s
 
 func (b *builder) templateRender(text string, trim bool) string {
 	return b.templateRenderBase(text, trim, map[string]any{
-		"target": b.target,
+		"target":      b.target,
+		"grammarOnly": b.grammarOnly,
 	})
 }
 
@@ -66,6 +67,30 @@ func OptimizeRefExprByIndex(enable bool) Option {
 		prev := b.iRefEnable
 		b.iRefEnable = enable
 		return OptimizeRefExprByIndex(prev)
+	}
+}
+
+func GrammarOnly(enable bool) Option {
+	return func(b *builder) Option {
+		prev := b.grammarOnly
+		b.grammarOnly = enable
+		return GrammarOnly(prev)
+	}
+}
+
+func RunFuncPrefix(value string) Option {
+	return func(b *builder) Option {
+		prev := b.funcPrefix
+		b.funcPrefix = value
+		return RunFuncPrefix(prev)
+	}
+}
+
+func GrammarName(value string) Option {
+	return func(b *builder) Option {
+		prev := b.grammarName
+		b.grammarName = value
+		return GrammarName(prev)
 	}
 }
 
@@ -134,6 +159,10 @@ type builder struct {
 	iRefEnable     bool
 	iRefCodeEnable bool
 
+	funcPrefix  string
+	grammarName string
+	grammarOnly bool
+
 	ruleName2Index map[string]*ExprInfo
 }
 
@@ -162,7 +191,10 @@ func (b *builder) buildParser(grammar *ast.Grammar) error {
 	for _, rule := range grammar.Rules {
 		b.writeRuleCode(rule)
 	}
-	b.writeStaticCode()
+
+	if !b.grammarOnly {
+		b.writeStaticCode()
+	}
 
 	return b.err
 }
@@ -190,7 +222,7 @@ func (b *builder) writeGrammar(g *ast.Grammar) {
 	}
 	b.ruleName2Index = m
 
-	b.writelnf("var g = &grammar {")
+	b.writelnf("var %s = &grammar {", b.grammarName)
 	b.writelnf("\trules: []*rule{")
 	for _, r := range g.Rules {
 		b.writeRule(r)
@@ -922,6 +954,7 @@ func (b *builder) writeStaticCode() {
 		IRefCodeEnable bool
 		NeedExprWrap   bool
 		ParseExprName  string
+		GrammarVarName string
 	}{
 		Optimize:       b.optimize,
 		Nolint:         b.nolint,
@@ -932,6 +965,7 @@ func (b *builder) writeStaticCode() {
 		IRefCodeEnable: b.iRefCodeEnable,
 		NeedExprWrap:   !b.optimize || b.haveLeftRecursion,
 		ParseExprName:  "parseExpr",
+		GrammarVarName: b.grammarName,
 	}
 	if !params.NeedExprWrap {
 		params.ParseExprName = "parseExprWrap"
@@ -967,7 +1001,7 @@ func (b *builder) writeStaticCode() {
 }
 
 func (b *builder) funcName(ix int) string {
-	return "_on" + b.ruleName + "_" + strconv.Itoa(ix)
+	return "_on" + b.funcPrefix + b.ruleName + "_" + strconv.Itoa(ix)
 }
 
 func (b *builder) writef(f string, args ...any) {

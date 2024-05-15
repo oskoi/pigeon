@@ -51,8 +51,9 @@ func main() {
 
 		cacheFlag = fs.Bool("cache", false, "cache parsing results")
 
-		// runFuncPrefixFlag = fs.String("run-func-prefix", "", "set prefix for generated function name: `(*parser).call_onXXX`. For multiple peg files")
-		// grammarOnlyFlag        = fs.Bool("grammar-only", false, "use it when you have multiple peg files")
+		grammarNameFlag        = fs.String("grammar-name", "g", "default is g, `var g = &grammar{ ... }")
+		runFuncPrefixFlag      = fs.String("run-func-prefix", "", "set prefix for generated function name: `(*parser).call_onXXX`. For multiple peg files")
+		grammarOnlyFlag        = fs.Bool("grammar-only", false, "use it when you have multiple peg files")
 		optimizeRefExprByIndex = fs.Bool("optimize-ref-expr-by-index", false, "generate optimized parser grammar find RefExpr by index (~10% increased)")
 
 		//optimizeGrammar        = fs.Bool("optimize-grammar", false, "optimize the given grammar (EXPERIMENTAL FEATURE)")
@@ -141,9 +142,13 @@ func main() {
 		optimizeParser := builder.Optimize(*optimizeParserFlag)
 		nolintOpt := builder.Nolint(*nolint)
 		refExprByIndex := builder.OptimizeRefExprByIndex(*optimizeRefExprByIndex)
+		runFuncPrefix := builder.RunFuncPrefix(*runFuncPrefixFlag)
+		grammarOnly := builder.GrammarOnly(*grammarOnlyFlag)
+		grammarName := builder.GrammarName(*grammarNameFlag)
 
 		if err := builder.BuildParser(
 			outBuf, grammar, curNmOpt, optimizeParser,
+			runFuncPrefix, grammarOnly, grammarName,
 			nolintOpt, refExprByIndex); err != nil {
 			fmt.Fprintln(os.Stderr, "build error: ", err)
 			exit(5)
@@ -200,8 +205,6 @@ the generated code is written to this file instead.
 		when debugging, otherwise the panic is converted to an error.
 	-o OUTPUT_FILE
 		write the generated parser to OUTPUT_FILE. Defaults to stdout.
-	-optimize-basic-latin
-		generate optimized parser for Unicode Basic Latin character set
 	-optimize-ref-expr-by-index
 		generate optimized parser grammar find RefExpr by index (~10%% performance increased, cause more git line diff)
 	-optimize-parser
@@ -216,6 +219,12 @@ the generated code is written to this file instead.
 		comma-separated list of rule names that may be used as alternate
 		entrypoints for the parser, in addition to the first rule in the
 		grammar.
+	-grammar-only
+		generate grammar part only, used for multiple peg files.
+	-grammar-name
+		to set variable name of grammar, default is g, "var g = &grammar{ ... }"
+	-run-func-prefix
+		set prefix for generated function name: "(*parser).call_onXXX". For multiple peg files
 
 See https://godoc.org/github.com/mna/pigeon for more information.
 This version is a fork: https://github.com/fy0/pigeon

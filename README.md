@@ -17,6 +17,12 @@ See the [godoc page][3] for detailed usage. Also have a look at the [Pigeon Wiki
   * Generated parser has less memory allocated.
   * Generated parser uses fewer lines of code.
 
+* Multiple peg files supported.
+  1. `pigeon -o script1.peg.go script1.peg` to generate a normal parser.
+  2. Run `pigeon -grammar-only -grammar-name=g2 -run-func-prefix="_s2_" -o script2.peg.go script2.peg` to generate grammar only code in same package.
+  3. Use it by `newParser("filename", "expr").parse(g2)`
+
+
 * `actionExpr` is different
   * Only needs to return one value. Moreover, this is not required. If the return statement is not written, it will automatically return c.text. Examples:
     * `expr <- [0-9]+ { fmt.Println(expr) }` is ok in this fork.
