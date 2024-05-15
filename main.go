@@ -39,18 +39,18 @@ func main() {
 
 	// define command-line flags
 	var (
-		cacheFlag              = fs.Bool("cache", false, "cache parsing results")
-		dbgFlag                = fs.Bool("debug", false, "set debug mode")
-		shortHelpFlag          = fs.Bool("h", false, "show help page")
-		longHelpFlag           = fs.Bool("help", false, "show help page")
-		nolint                 = fs.Bool("nolint", false, "add '// nolint: ...' comments to suppress warnings by gometalinter or golangci-lint")
-		noRecoverFlag          = fs.Bool("no-recover", false, "do not recover from panic")
-		outputFlag             = fs.String("o", "", "output file, defaults to stdout")
-		optimizeBasicLatinFlag = fs.Bool("optimize-basic-latin", false, "generate optimized parser for Unicode Basic Latin character sets")
-		optimizeParserFlag     = fs.Bool("optimize-parser", false, "generate optimized parser without Debug and Memoize options")
-		recvrNmFlag            = fs.String("receiver-name", "c", "receiver name for the generated methods")
-		noBuildFlag            = fs.Bool("x", false, "do not build, only parse")
-		supportLeftRecursion   = fs.Bool("support-left-recursion", false, "add support left recursion (EXPERIMENTAL FEATURE)")
+		dbgFlag            = fs.Bool("debug", false, "set debug mode")
+		shortHelpFlag      = fs.Bool("h", false, "show help page")
+		longHelpFlag       = fs.Bool("help", false, "show help page")
+		nolint             = fs.Bool("nolint", false, "add '// nolint: ...' comments to suppress warnings by gometalinter or golangci-lint")
+		noRecoverFlag      = fs.Bool("no-recover", false, "do not recover from panic")
+		outputFlag         = fs.String("o", "", "output file, defaults to stdout")
+		optimizeParserFlag = fs.Bool("optimize-parser", false, "generate optimized parser without Debug and Memoize options")
+		recvrNmFlag        = fs.String("receiver-name", "c", "receiver name for the generated methods")
+		noBuildFlag        = fs.Bool("x", false, "do not build, only parse")
+
+		cacheFlag            = fs.Bool("cache", false, "cache parsing results")
+		supportLeftRecursion = fs.Bool("support-left-recursion", false, "add support left recursion (EXPERIMENTAL FEATURE)")
 
 		// runFuncPrefixFlag = fs.String("run-func-prefix", "", "set prefix for generated function name: `(*parser).call_onXXX`. For multiple peg files")
 		// grammarOnlyFlag        = fs.Bool("grammar-only", false, "use it when you have multiple peg files")
@@ -140,13 +140,12 @@ func main() {
 
 		curNmOpt := builder.ReceiverName(*recvrNmFlag)
 		optimizeParser := builder.Optimize(*optimizeParserFlag)
-		basicLatinOptimize := builder.BasicLatinLookupTable(*optimizeBasicLatinFlag)
 		nolintOpt := builder.Nolint(*nolint)
 		leftRecursionSupporter := builder.SupportLeftRecursion(*supportLeftRecursion)
 		refExprByIndex := builder.OptimizeRefExprByIndex(*optimizeRefExprByIndex)
 
 		if err := builder.BuildParser(
-			outBuf, grammar, curNmOpt, optimizeParser, basicLatinOptimize,
+			outBuf, grammar, curNmOpt, optimizeParser,
 			nolintOpt, leftRecursionSupporter, refExprByIndex); err != nil {
 			fmt.Fprintln(os.Stderr, "build error: ", err)
 			exit(5)

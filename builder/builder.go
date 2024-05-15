@@ -112,18 +112,6 @@ func Nolint(nolint bool) Option {
 	}
 }
 
-// BasicLatinLookupTable returns an option that specifies the basicLatinLookup option
-// If basicLatinLookup is true, a lookup slice for the first 128 chars of
-// the Unicode table (Basic Latin) is generated for each CharClassMatcher
-// to increase the character matching.
-func BasicLatinLookupTable(basicLatinLookupTable bool) Option {
-	return func(b *builder) Option {
-		prev := b.basicLatinLookupTable
-		b.basicLatinLookupTable = basicLatinLookupTable
-		return BasicLatinLookupTable(prev)
-	}
-}
-
 // BuildParser builds the PEG parser using the provider grammar. The code is
 // written to the specified w.
 func BuildParser(w io.Writer, g *ast.Grammar, opts ...Option) error {
@@ -138,13 +126,12 @@ type builder struct {
 	err error
 
 	// options
-	recvName              string
-	optimize              bool
-	basicLatinLookupTable bool
-	globalState           bool
-	nolint                bool
-	supportLeftRecursion  bool
-	haveLeftRecursion     bool
+	recvName             string
+	optimize             bool
+	globalState          bool
+	nolint               bool
+	supportLeftRecursion bool
+	haveLeftRecursion    bool
 
 	ruleName  string
 	exprIndex int
@@ -458,9 +445,6 @@ func (b *builder) writeCharClassMatcher(ch *ast.CharClassMatcher) {
 			b.writef("unicode.%s,", cl)
 		}
 		b.writelnf("},")
-	}
-	if b.basicLatinLookupTable {
-		b.writelnf("\tbasicLatinChars: %#v,", BasicLatinLookup(ch.Chars, ch.Ranges, ch.UnicodeClasses, ch.IgnoreCase))
 	}
 	b.writelnf("\tignoreCase: %t,", ch.IgnoreCase)
 	b.writelnf("\tinverted: %t,", ch.Inverted)
@@ -940,29 +924,27 @@ func (b *builder) writeFunc(funcIx int, code *ast.CodeBlock, funcTpl string) {
 func (b *builder) writeStaticCode() {
 	buffer := bytes.NewBufferString("")
 	params := struct {
-		Optimize              bool
-		BasicLatinLookupTable bool
-		LeftRecursion         bool
-		Nolint                bool
-		SetRulePos            bool
-		Entrypoint            string
-		GrammarMap            bool
-		IRefEnable            bool
-		IRefCodeEnable        bool
-		NeedExprWrap          bool
-		ParseExprName         string
+		Optimize       bool
+		LeftRecursion  bool
+		Nolint         bool
+		SetRulePos     bool
+		Entrypoint     string
+		GrammarMap     bool
+		IRefEnable     bool
+		IRefCodeEnable bool
+		NeedExprWrap   bool
+		ParseExprName  string
 	}{
-		Optimize:              b.optimize,
-		BasicLatinLookupTable: b.basicLatinLookupTable,
-		LeftRecursion:         b.haveLeftRecursion,
-		Nolint:                b.nolint,
-		SetRulePos:            false,
-		Entrypoint:            b.entrypoint,
-		GrammarMap:            b.grammarMap,
-		IRefEnable:            b.iRefEnable,
-		IRefCodeEnable:        b.iRefCodeEnable,
-		NeedExprWrap:          !b.optimize || b.haveLeftRecursion,
-		ParseExprName:         "parseExpr",
+		Optimize:       b.optimize,
+		LeftRecursion:  b.haveLeftRecursion,
+		Nolint:         b.nolint,
+		SetRulePos:     false,
+		Entrypoint:     b.entrypoint,
+		GrammarMap:     b.grammarMap,
+		IRefEnable:     b.iRefEnable,
+		IRefCodeEnable: b.iRefCodeEnable,
+		NeedExprWrap:   !b.optimize || b.haveLeftRecursion,
+		ParseExprName:  "parseExpr",
 	}
 	if !params.NeedExprWrap {
 		params.ParseExprName = "parseExprWrap"

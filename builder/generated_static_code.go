@@ -314,7 +314,6 @@ type charClassMatcher struct {
 	pos position
 	// {{ end }} ==template==
 	val             string
-	basicLatinChars [128]bool
 	chars           []rune
 	ranges          []rune
 	classes         []*unicode.RangeTable
@@ -1235,18 +1234,6 @@ func (p *parser) parseCharClassMatcher(chr *charClassMatcher) (any, bool) {
 
 	// {{ end }} ==template==
 	cur := p.pt.rn
-
-	// ==template== {{ if .BasicLatinLookupTable }}
-	if cur < 128 {
-		if chr.basicLatinChars[cur] != chr.inverted {
-			p.read()
-			p.failAt(true, &start.position, chr.val)
-			return p.sliceFrom(&start), true
-		}
-		p.failAt(false, &start.position, chr.val)
-		return nil, false
-	}
-	// {{ end }} ==template==
 
 	// can't match EOF
 	if cur == utf8.RuneError && p.pt.w == 0 { // see utf8.DecodeRune
