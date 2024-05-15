@@ -43,24 +43,16 @@ func (b *builder) templateRender(text string, trim bool) string {
 // generated function templates
 var (
 	callCodeFuncTemplate = `func (p *parser) call{{.funcName}}() any {
-    stack := p.vstack[len(p.vstack)-1]
-    _ = stack
-	c := p.cur
-
-	return (func ({{.paramsDef}}) any {
+{{ if .useStack }} stack := p.vstack[len(p.vstack)-1]; {{ end }} return (func (c *current, {{.paramsDef}}) any {
 		{{.code}}
 		return nil
-	})({{.paramsCall}})
+	})(&p.cur, {{.paramsCall}})
 }
 `
 	callPredFuncTemplate = `func (p *parser) call{{.funcName}}() bool {
-    stack := p.vstack[len(p.vstack)-1]
-    _ = stack
-	c := p.cur
-
-	return (func ({{.paramsDef}}) bool {
+{{ if .useStack }} stack := p.vstack[len(p.vstack)-1]; {{ end }}	return (func (c *current, {{.paramsDef}}) bool {
 		{{.code}}
-	})({{.paramsCall}})
+	})(&p.cur, {{.paramsCall}})
 }
 `
 )
@@ -941,6 +933,7 @@ func (b *builder) writeFunc(funcIx int, code *ast.CodeBlock, funcTpl string) {
 		"paramsDef":  params,
 		"code":       val,
 		"paramsCall": args.String(),
+		"useStack":   len(argsInfo) > 0,
 	}))
 }
 
@@ -956,6 +949,8 @@ func (b *builder) writeStaticCode() {
 		GrammarMap            bool
 		IRefEnable            bool
 		IRefCodeEnable        bool
+		NeedExprWrap          bool
+		ParseExprName         string
 	}{
 		Optimize:              b.optimize,
 		BasicLatinLookupTable: b.basicLatinLookupTable,
@@ -966,6 +961,11 @@ func (b *builder) writeStaticCode() {
 		GrammarMap:            b.grammarMap,
 		IRefEnable:            b.iRefEnable,
 		IRefCodeEnable:        b.iRefCodeEnable,
+		NeedExprWrap:          !b.optimize || b.haveLeftRecursion,
+		ParseExprName:         "parseExpr",
+	}
+	if !params.NeedExprWrap {
+		params.ParseExprName = "parseExprWrap"
 	}
 	t := template.Must(template.New("static_code").Parse(staticCode))
 

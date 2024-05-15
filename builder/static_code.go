@@ -38,40 +38,45 @@ var (
 	errMaxExprCnt = errors.New("max number of expressions parsed")
 )
 
-// Option is a function that can set an option on the parser. It returns
-// the previous setting as an Option.
-type Option func(*parser) Option
+type parserStack[T any] struct {
+	data     []T
+	index    int
+	size     int
+}
 
-// maxExpressions creates an Option to stop parsing after the provided
-// number of expressions have been parsed, if the value is 0 then the parser will
-// parse for as many steps as needed (possibly an infinite number).
-//
-// The default for maxExprCnt is 0.
-func maxExpressions(maxExprCnt uint64) Option {
-	return func(p *parser) Option {
-		oldMaxExprCnt := p.maxExprCnt
-		p.maxExprCnt = maxExprCnt
-		return maxExpressions(oldMaxExprCnt)
+func (ss *parserStack[T]) init(size int) {
+	ss.index = -1
+	ss.data = make([]T, size)
+	ss.size = size
+}
+
+func (ss *parserStack[T]) push(v *T) {
+	ss.index += 1
+	if ss.index == ss.size {
+		ss.data = append(ss.data, *v)
+		ss.size = len(ss.data)
+	} else {
+		ss.data[ss.index] = *v
 	}
 }
 
-// entrypoint creates an Option to set the rule exprType to use as entrypoint.
-// The rule exprType must have been specified in the -alternate-entrypoints
-// if generating the parser with the -optimize-grammar flag, otherwise
-// it may have been optimized out. Passing an empty string sets the
-// entrypoint to the first rule in the grammar.
-//
-// The default is to start parsing at the first rule in the grammar.
-func entrypoint(ruleName string) Option {
-	return func(p *parser) Option {
-		oldEntrypoint := p.entrypoint
-		p.entrypoint = ruleName
-		if ruleName == "" {
-			p.entrypoint = "{{ .Entrypoint }}"
-		}
-		return entrypoint(oldEntrypoint)
-	}
+func (ss *parserStack[T]) pop() *T {
+	ref := &ss.data[ss.index]
+	ss.index --
+	return ref
 }
+
+func (ss *parserStack[T]) setTop(t T) {
+	ss.data[ss.index] = t
+}
+
+func (ss *parserStack[T]) top() *T {
+	return &ss.data[ss.index]
+}
+
+// option is a function that can set an option on the parser. It returns
+// the previous setting as an option.
+type option func(*parser) option
 
 // ==template== {{ if not .Optimize }}
 // statistics adds a user provided Stats struct to the parser to allow
@@ -91,8 +96,8 @@ func entrypoint(ruleName string) Option {
 //	    log.Panicln(err)
 //	}
 //	fmt.Println(string(b))
-func statistics(stats *Stats, choiceNoMatch string) Option {
-	return func(p *parser) Option {
+func statistics(stats *Stats, choiceNoMatch string) option {
+	return func(p *parser) option {
 		oldStats := p.Stats
 		p.Stats = stats
 		oldChoiceNoMatch := p.choiceNoMatch
@@ -104,26 +109,26 @@ func statistics(stats *Stats, choiceNoMatch string) Option {
 	}
 }
 
-// debug creates an Option to set the debug flag to b. When set to true,
+// debug creates an option to set the debug flag to b. When set to true,
 // debugging information is printed to stdout while parsing.
 //
 // The default is false.
-func debug(b bool) Option {
-	return func(p *parser) Option {
+func debug(b bool) option {
+	return func(p *parser) option {
 		old := p.debug
 		p.debug = b
 		return debug(old)
 	}
 }
 
-// memoize creates an Option to set the memoize flag to b. When set to true,
+// memoize creates an option to set the memoize flag to b. When set to true,
 // the parser will cache all results so each expression is evaluated only
 // once. This guarantees linear parsing time even for pathological cases,
 // at the expense of more memory and slower times for typical cases.
 //
 // The default is false.
-func memoize(b bool) Option {
-	return func(p *parser) Option {
+func memoize(b bool) option {
+	return func(p *parser) option {
 		old := p.memoize
 		p.memoize = b
 		return memoize(old)
@@ -132,37 +137,9 @@ func memoize(b bool) Option {
 
 // {{ end }} ==template==
 
-// allowInvalidUTF8 creates an Option to allow invalid UTF-8 bytes.
-// Every invalid UTF-8 byte is treated as a utf8.RuneError (U+FFFD)
-// by character class matchers and is matched by the any matcher.
-// The returned matched value, c.text and c.offset are NOT affected.
-//
-// The default is false.
-func allowInvalidUTF8(b bool) Option {
-	return func(p *parser) Option {
-		old := p.allowInvalidUTF8
-		p.allowInvalidUTF8 = b
-		return allowInvalidUTF8(old)
-	}
-}
-
-// recover creates an Option to set the recover flag to b. When set to
-// true, this causes the parser to recover from panics and convert it
-// to an error. Setting it to false can be useful while debugging to
-// access the full stack trace.
-//
-// The default is true.
-func recoverOption(b bool) Option {
-	return func(p *parser) Option {
-		old := p.recover
-		p.recover = b
-		return recoverOption(old)
-	}
-}
-
 // Parse parses the data from b using filename as information in the
 // error messages.
-func parse(filename string, b []byte, opts ...Option) (any, error) {
+func parse(filename string, b []byte, opts ...option) (any, error) {
 	return newParser(filename, b, opts...).parse(g)
 }
 
@@ -186,18 +163,8 @@ type savepoint struct {
 type current struct {
 	pos  position // start position of the match
 	text []byte   // raw text of the match
-
-	// globalStore is a general store for the user to store arbitrary key-value
-	// pairs that they need to manage and that they do not want tied to the
-	// backtracking of the parser. This is only modified by the user and never
-	// rolled back by the parser. It is always up to the user to keep this in a
-	// consistent state.
-	globalStore storeDict
-
 	data *ParserCustomData
 }
-
-type storeDict map[string]any
 
 // the AST types...
 
@@ -303,6 +270,7 @@ type ruleRefExpr struct {
 	name string
 }
 
+// {{ if .IRefEnable }}
 // {{ if .Nolint }} nolint: structcheck {{else}} ==template== {{ end }}
 type ruleIRefExpr struct {
 	// ==template== {{ if .SetRulePos }}
@@ -310,7 +278,9 @@ type ruleIRefExpr struct {
 	// {{ end }} ==template==
 	index int
 }
+// {{ end }} ==template==
 
+// {{ if .IRefCodeEnable }}
 // {{ if .Nolint }} nolint: structcheck {{else}} ==template== {{ end }}
 type ruleIRefExprX struct {
 	// ==template== {{ if .SetRulePos }}
@@ -319,6 +289,7 @@ type ruleIRefExprX struct {
 	index int
 	call func(p*parser, expr any) (any, bool)
 }
+// {{ end }} ==template==
 
 // {{ if .Nolint }} nolint: structcheck {{else}} ==template== {{ end }}
 type andCodeExpr struct {
@@ -432,7 +403,7 @@ func (p *parserError) Error() string {
 }
 
 // newParser creates a parser with the specified input source and options.
-func newParser(filename string, b []byte, opts ...Option) *parser {
+func newParser(filename string, b []byte, opts ...option) *parser {
 	stats := Stats{
 		ChoiceAltCnt: make(map[string]map[string]int),
 	}
@@ -444,7 +415,6 @@ func newParser(filename string, b []byte, opts ...Option) *parser {
 		pt:       savepoint{position: position{line: 1}},
 		recover:  true,
 		cur: current{
-			globalStore: make(storeDict),
 			data: &ParserCustomData{},
 		},
 		maxFailPos:      position{col: 1, line: 1},
@@ -454,6 +424,8 @@ func newParser(filename string, b []byte, opts ...Option) *parser {
 		entrypoint: "{{ .Entrypoint }}",
 		scStack: []bool{false},
 	}
+
+	p.spStack.init(5)
 	p.setOptions(opts)
 
 	if p.maxExprCnt == 0 {
@@ -463,16 +435,16 @@ func newParser(filename string, b []byte, opts ...Option) *parser {
 	return p
 }
 
-// setCustomData to the parser.
-func (p *parser) setCustomData(data *ParserCustomData) {
-	p.cur.data = data;
-}
-
 // setOptions applies the options to the parser.
-func (p *parser) setOptions(opts []Option) {
+func (p *parser) setOptions(opts []option) {
 	for _, opt := range opts {
 		opt(p)
 	}
+}
+
+// setCustomData to the parser.
+func (p *parser) setCustomData(data *ParserCustomData) {
+	p.cur.data = data;
 }
 
 func (p *parser) checkSkipCode() bool {
@@ -570,7 +542,8 @@ type parser struct {
 	_errPos *position
 	// skip code stack
 	scStack []bool
-	startCache savepoint
+	// save point stack
+	spStack parserStack[savepoint]
 }
 
 // push a variable set on the vstack.
@@ -690,7 +663,7 @@ func (p *parser) addErrAt(err error, pos position, expected []string) {
 	p.errs.add(pe)
 }
 
-func (p *parser) failAt(fail bool, pos position, want string) {
+func (p *parser) failAt(fail bool, pos *position, want string) {
 	// process fail if parsing fails and not inverted or parsing succeeds and invert is set
 	if fail == p.maxFailInvertExpected {
 		if pos.offset < p.maxFailPos.offset {
@@ -698,7 +671,7 @@ func (p *parser) failAt(fail bool, pos position, want string) {
 		}
 
 		if pos.offset > p.maxFailPos.offset {
-			p.maxFailPos = pos
+			p.maxFailPos = *pos
 			p.maxFailExpected = p.maxFailExpected[:0]
 		}
 
@@ -742,8 +715,13 @@ func (p *parser) restore(pt savepoint) {
 }
 
 // get the slice of bytes from the savepoint start to the current position.
-func (p *parser) sliceFrom(start savepoint) []byte {
+func (p *parser) sliceFrom(start *savepoint) []byte {
 	return p.data[start.position.offset:p.pt.position.offset]
+}
+
+// get the slice of bytes from the savepoint start to the current position.
+func (p *parser) sliceFromOffset(offset int) []byte {
+	return p.data[offset:p.pt.position.offset]
 }
 
 // ==template== {{ if or .LeftRecursion (not .Optimize) }}
@@ -841,8 +819,7 @@ func (p *parser) parse(grammar map[string]*rule) (val any, err error) {
 	return val, p.errs.err()
 }
 
-// {{ end }} ==template==
-// {{ if not .GrammarMap }}
+// {{ else }} ==template==
 
 func (p *parser) buildRulesTable(g *grammar) {
 	p.rules = make(map[string]*rule, len(g.rules))
@@ -1008,6 +985,7 @@ func (p *parser) parseRuleMemoize(rule *rule) (any, bool) {
 
 // {{ end }} ==template==
 
+// ==template== {{ if .NeedExprWrap }}
 func (p *parser) parseRuleWrap(rule *rule) (any, bool) {
 	// ==template== {{ if not .Optimize }}
 	if p.debug {
@@ -1018,7 +996,7 @@ func (p *parser) parseRuleWrap(rule *rule) (any, bool) {
 		val any
 		ok  bool
 		// ==template== {{ if not .Optimize }}
-		startMark = p.pt
+		startMark = &p.pt
 		// {{ end }} ==template==
 	)
 
@@ -1070,7 +1048,18 @@ func (p *parser) parseRule(rule *rule) (any, bool) {
 	p.rstack = p.rstack[:len(p.rstack)-1]
 	return val, ok
 }
+// {{ else }}
+func (p *parser) parseRuleWrap(rule *rule) (any, bool) {
+	p.rstack = append(p.rstack, rule)
+	p.pushV()
+	val, ok := p.parseExprWrap(rule.expr)
+	p.popV()
+	p.rstack = p.rstack[:len(p.rstack)-1]
+	return val, ok
+}
+// {{ end }} ==template==
 
+// ==template== {{ if .NeedExprWrap }}
 func (p *parser) parseExprWrap(expr any) (any, bool) {
 	// ==template== {{ if not .Optimize }}
 	var pt savepoint
@@ -1103,9 +1092,10 @@ func (p *parser) parseExprWrap(expr any) (any, bool) {
 	// {{ end }} ==template==
 	return val, ok
 }
+// {{ end }} ==template==
 
 // {{ if .Nolint }} nolint: gocyclo {{else}} ==template== {{ end }}
-func (p *parser) parseExpr(expr any) (any, bool) {
+func (p *parser) {{ .ParseExprName }}(expr any) (any, bool) {
 	p.ExprCnt++
 	if p.ExprCnt > p.maxExprCnt {
 		panic(errMaxExprCnt)
@@ -1146,7 +1136,7 @@ func (p *parser) parseExpr(expr any) (any, bool) {
 		val, ok = p.parseRecoveryExpr(expr)
 	case *ruleRefExpr:
 		val, ok = p.parseRuleRefExpr(expr)
-	// {{ if .IRefEnable }}
+	// ==template== {{ if .IRefEnable }}
 	case *ruleIRefExpr:
 		val, ok = p.parseRuleIRefExpr(expr)
 	// {{ end }} ==template==
@@ -1177,16 +1167,17 @@ func (p *parser) parseActionExpr(act *actionExpr) (any, bool) {
 	// {{ end }} ==template==
 	skipCode := p.checkSkipCode()
 	if !skipCode {
-		p.startCache = p.pt
+		p.spStack.push(&p.pt)
 	}
 	val, ok := p.parseExprWrap(act.expr)
 	if ok {
 		if skipCode {
 			return nil, true
 		}
-		p.cur.pos = p.startCache.position
-		p.cur.text = p.sliceFrom(p.startCache)
-		p._errPos = &p.startCache.position
+		start := p.spStack.pop()
+		p.cur.pos = start.position
+		p.cur.text = p.sliceFrom(start)
+		p._errPos = &start.position
 		actVal := act.run(p)
 		p._errPos = nil
 
@@ -1244,13 +1235,13 @@ func (p *parser) parseAnyMatcher(any *anyMatcher) (any, bool) {
 	// {{ end }} ==template==
 	if p.pt.rn == utf8.RuneError && p.pt.w == 0 {
 		// EOF - see utf8.DecodeRune
-		p.failAt(false, p.pt.position, ".")
+		p.failAt(false, &p.pt.position, ".")
 		return nil, false
 	}
-	start := p.pt
+	startOffset := p.pt.offset
+	p.failAt(true, &p.pt.position, ".")
 	p.read()
-	p.failAt(true, start.position, ".")
-	return p.sliceFrom(start), true
+	return p.sliceFromOffset(startOffset), true
 }
 
 // {{ if .Nolint }} nolint: gocyclo {{else}} ==template== {{ end }}
@@ -1262,23 +1253,22 @@ func (p *parser) parseCharClassMatcher(chr *charClassMatcher) (any, bool) {
 
 	// {{ end }} ==template==
 	cur := p.pt.rn
-	start := p.pt
 
 	// ==template== {{ if .BasicLatinLookupTable }}
 	if cur < 128 {
 		if chr.basicLatinChars[cur] != chr.inverted {
 			p.read()
-			p.failAt(true, start.position, chr.val)
-			return p.sliceFrom(start), true
+			p.failAt(true, &start.position, chr.val)
+			return p.sliceFrom(&start), true
 		}
-		p.failAt(false, start.position, chr.val)
+		p.failAt(false, &start.position, chr.val)
 		return nil, false
 	}
 	// {{ end }} ==template==
 
 	// can't match EOF
 	if cur == utf8.RuneError && p.pt.w == 0 { // see utf8.DecodeRune
-		p.failAt(false, start.position, chr.val)
+		p.failAt(false, &p.pt.position, chr.val)
 		return nil, false
 	}
 
@@ -1290,12 +1280,13 @@ func (p *parser) parseCharClassMatcher(chr *charClassMatcher) (any, bool) {
 	for _, rn := range chr.chars {
 		if rn == cur {
 			if chr.inverted {
-				p.failAt(false, start.position, chr.val)
+				p.failAt(false, &p.pt.position, chr.val)
 				return nil, false
 			}
+			offset := p.pt.position.offset
+			p.failAt(true, &p.pt.position, chr.val)
 			p.read()
-			p.failAt(true, start.position, chr.val)
-			return p.sliceFrom(start), true
+			return p.sliceFromOffset(offset), true
 		}
 	}
 
@@ -1303,12 +1294,13 @@ func (p *parser) parseCharClassMatcher(chr *charClassMatcher) (any, bool) {
 	for i := 0; i < len(chr.ranges); i += 2 {
 		if cur >= chr.ranges[i] && cur <= chr.ranges[i+1] {
 			if chr.inverted {
-				p.failAt(false, start.position, chr.val)
+				p.failAt(false, &p.pt.position, chr.val)
 				return nil, false
 			}
+			offset := p.pt.position.offset
+			p.failAt(true, &p.pt.position, chr.val)
 			p.read()
-			p.failAt(true, start.position, chr.val)
-			return p.sliceFrom(start), true
+			return p.sliceFromOffset(offset), true
 		}
 	}
 
@@ -1316,21 +1308,23 @@ func (p *parser) parseCharClassMatcher(chr *charClassMatcher) (any, bool) {
 	for _, cl := range chr.classes {
 		if unicode.Is(cl, cur) {
 			if chr.inverted {
-				p.failAt(false, start.position, chr.val)
+				p.failAt(false, &p.pt.position, chr.val)
 				return nil, false
 			}
+			offset := p.pt.position.offset
+			p.failAt(true, &p.pt.position, chr.val)
 			p.read()
-			p.failAt(true, start.position, chr.val)
-			return p.sliceFrom(start), true
+			return p.sliceFromOffset(offset), true
 		}
 	}
 
 	if chr.inverted {
+		offset := p.pt.position.offset
+		p.failAt(true, &p.pt.position, chr.val)
 		p.read()
-		p.failAt(true, start.position, chr.val)
-		return p.sliceFrom(start), true
+		return p.sliceFromOffset(offset), true
 	}
-	p.failAt(false, start.position, chr.val)
+	p.failAt(false, &p.pt.position, chr.val)
 	return nil, false
 }
 
@@ -1359,7 +1353,6 @@ func (p *parser) parseChoiceExpr(ch *choiceExpr) (any, bool) {
 		defer p.out(p.in("parseChoiceExpr"))
 	}
 	// {{ end }} ==template==
-
 	for altI, alt := range ch.alternatives {
 		// dummy assignment to prevent compile error if optimized
 		_ = altI
@@ -1387,26 +1380,16 @@ func (p *parser) parseLabeledExpr(lab *labeledExpr) (any, bool) {
 	}
 
 	// {{ end }} ==template==
-	start := p.pt
+	startOffset := p.pt.position.offset
 	var val any
 	var ok bool
-	if lab.textCapture {
-		// state := p.cloneState()
-		p.pushV()
-		// p.scStack = append(p.scStack, true)
-		val, ok = p.parseExprWrap(lab.expr)
-		// p.scStack = p.scStack[:len(p.scStack)-1]
-		p.popV()
-		// p.restoreState(state)
-	} else {
-		p.pushV()
-		val, ok = p.parseExprWrap(lab.expr)
-		p.popV()
-	}
+	p.pushV()
+	val, ok = p.parseExprWrap(lab.expr)
+	p.popV()
 	if ok && lab.label != "" {
 		m := p.vstack[len(p.vstack)-1]
 		if lab.textCapture {
-			m[lab.label] = string(p.sliceFrom(start))
+			m[lab.label] = string(p.sliceFromOffset(startOffset))
 		} else {
 			m[lab.label] = val
 		}
@@ -1424,7 +1407,6 @@ func (p *parser) parseCodeExpr(code *codeExpr) (any, bool) {
 	if !code.notSkip && p.checkSkipCode() {
 		return nil, true
 	}
-
 	return code.run(p), true
 }
 
@@ -1442,14 +1424,14 @@ func (p *parser) parseLitMatcher(lit *litMatcher) (any, bool) {
 			cur = unicode.ToLower(cur)
 		}
 		if cur != want {
-			p.failAt(false, start.position, lit.want)
+			p.failAt(false, &start.position, lit.want)
 			p.restore(start)
 			return nil, false
 		}
 		p.read()
 	}
-	p.failAt(true, start.position, lit.want)
-	return p.sliceFrom(start), true
+	p.failAt(true, &start.position, lit.want)
+	return p.sliceFrom(&start), true
 }
 
 func (p *parser) parseNotCodeExpr(not *notCodeExpr) (any, bool) {
@@ -1497,7 +1479,6 @@ func (p *parser) parseOneOrMoreExpr(expr *oneOrMoreExpr) (any, bool) {
 
 	// {{ end }} ==template==
 	var vals []any
-
 	for {
 		p.pushV()
 		val, ok := p.parseExprWrap(expr.expr)
@@ -1520,7 +1501,6 @@ func (p *parser) parseRecoveryExpr(recover *recoveryExpr) (any, bool) {
 	}
 
 	// {{ end }} ==template==
-
 	p.pushRecovery(recover.failureLabel, recover.recoverExpr)
 	val, ok := p.parseExprWrap(recover.expr)
 	p.popRecovery()
@@ -1585,7 +1565,6 @@ func (p *parser) parseThrowExpr(expr *throwExpr) (any, bool) {
 	}
 
 	// {{ end }} ==template==
-
 	for i := len(p.recoveryStack) - 1; i >= 0; i-- {
 		if recoverExpr, ok := p.recoveryStack[i][expr.label]; ok {
 			if val, ok := p.parseExprWrap(recoverExpr); ok {
@@ -1593,7 +1572,6 @@ func (p *parser) parseThrowExpr(expr *throwExpr) (any, bool) {
 			}
 		}
 	}
-
 	return nil, false
 }
 
@@ -1605,7 +1583,6 @@ func (p *parser) parseZeroOrMoreExpr(expr *zeroOrMoreExpr) (any, bool) {
 
 	// {{ end }} ==template==
 	var vals []any
-
 	for {
 		p.pushV()
 		val, ok := p.parseExprWrap(expr.expr)

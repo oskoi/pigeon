@@ -12,18 +12,17 @@ See the [godoc page][3] for detailed usage. Also have a look at the [Pigeon Wiki
 ## Features for this fork
 
 * Performance tweak, 10-20x faster than original version(with some trade off).
-    * `parser.state` is removed, because it's very slow.
-    * `parseSeqExpr` only collect not nil values now. Mainly for performance improvement. For example: `e <- Expr __ Plus __ Expr` returns \[expr, '+', expr], original version return \[expr, nil, '+', nil, expr].
+  * `parser.state` is removed, because it's very slow.
+  * `parseSeqExpr` only collect not nil values now. Mainly for performance improvement. For example: `e <- Expr __ Plus __ Expr` returns \[expr, '+', expr], original version return \[expr, nil, '+', nil, expr].
+  * Generated parser has less memory allocated.
 
-* `-optimize-ref-expr-by-index` Option
-    * A option to tweak `RefExpr` the most usually used expr in parser.
-    * About ~10% faster with this option.
+* Generated parser uses fewer lines of code.
 
 * `actionExpr` is different
   * Only needs to return one value. Moreover, this is not required. If the return statement is not written, it will automatically return c.text. Examples:
-    * `expr <- [0-9]+ { fmt.Println(expr) }` is ok in this fork, `nil` will be returned if you don't return something.
-    * `expr <- "true" { return 1 }` also works.
-  * If you want to add a error by manual, do this:
+    * `expr <- [0-9]+ { fmt.Println(expr) }` is ok in this fork.
+    * `expr <- "true" { return 1 }` if you want return something.
+  * If you want to add an error by manual, do this:
     * `expr <- "if" { p.addErr(errors.New("keyword is not allowed")) }`, equals to `expr <- "if" { return nil, errors.New("keyword is not allowed") }` of original pigeon.
 
 * `andCodeExpr` and `notCodeExpr`:
@@ -31,37 +30,37 @@ See the [godoc page][3] for detailed usage. Also have a look at the [Pigeon Wiki
     * `expr <- &{ return c.data.AllowNumber } [0-9]+`
 
 * String capture:
-    * `expr <- val:<anotherExpr> { fmt.Println(val.(string)) }`
-    * `expr <- val:<(A '=' B)> { fmt.Println(val.(string)) }`
+  * `expr <- val:<anotherExpr> { fmt.Println(val.(string)) }`
+  * `expr <- val:<(A '=' B)> { fmt.Println(val.(string)) }`
 
 * Logical `and` / `or` match:
-    * `expr <- &&testExpr testExpr` // if testExpr return ok but matched nothing (e.g. testExpr <- 'A'*), `&&testEpr` returns false.
+  * `expr <- &&testExpr testExpr` // if testExpr return ok but matched nothing (e.g. testExpr <- 'A'*), `&&testEpr` returns false.
 
 * Skip all "codeExpr" while looking ahead [issue](https://github.com/mna/pigeon/issues/149), branch feat/skip-code-expr-while-looking-ahead
-
-    * See detail in the issue.
+  * See detail in the issue.
 
 * Remove ParseFile ParseReader, rename Parse and all options to lowercase [issue](https://github.com/mna/pigeon/issues/150), branch feat/rename-exported-api
-
-    * `ParseReader` converts io.Reader to bytes, then invoke `parse`, it don't make sense.
-    * Function `Parse` and all options(`MaxExpressions`,`Entrypoint`,`Statistics`,`Debug`,`Memoize`,`AllowInvalidUTF8`,`Recover`,`GlobalStore`,`InitState`) expose to module user. I think expose them is not a good idea.
+  * `ParseReader` converts io.Reader to bytes, then invoke `parse`, it don't make sense.
+  * Function `Parse` and all options(`MaxExpressions`,`Entrypoint`,`Statistics`,`Debug`,`Memoize`,`AllowInvalidUTF8`,`Recover`,`GlobalStore`,`InitState`) expose to module user. I think expose them is not a good idea.
 
 * ActionExpr refactored [issue](https://github.com/mna/pigeon/issues/150), branch refactor/actionExpr
-
-    * Unlimited ActionExpr(CodeExpr): grammar like `expr <- firstPart:[0-9]+ { fmt.Println(firstPart) }  secondPart:[a-z]+ { fmt.Println(firstPart, secondPart) }` is allowed for this fork.
-    * You can access parser in ActionExpr: `expr <- { fmt.Println(p) }`
-    * `stateCodeExpr(#{})` was removed.
+  * Unlimited ActionExpr(CodeExpr): grammar like `expr <- firstPart:[0-9]+ { fmt.Println(firstPart) }  secondPart:[a-z]+ { fmt.Println(firstPart, secondPart) }` is allowed for this fork.
+  * You can access parser in ActionExpr: `expr <- { fmt.Println(p) }`
+  * `stateCodeExpr(#{})` was removed.
 
 * Provide a struct(`ParserCustomData`) to embed, to replace the globalStore
-
-    * Must define a struct `ParserCustomData` in your module.
-    * Access data by `c.data`, for example: `expr <- { fmt.Println(c.data.MyOption) }`
+  * Must define a struct `ParserCustomData` in your module.
+  * Access data by `c.data`, for example: `expr <- { fmt.Println(c.data.MyOption) }`
 
 * `-optimize-grammar` not available.
 
 * `position` of generated code is removed 
-    * It produced a lot of different for version control.
-    * You can keep it by set `SetRulePos` to true and rebuild.
+  * It produced a lot of different for version control.
+  * You can keep it by set `SetRulePos` to true and rebuild.
+
+* `-optimize-ref-expr-by-index` option
+  * An option to tweak `RefExpr` the most usually used expr in parser.
+  * About ~10% faster with this option.
 
 ## Releases
 

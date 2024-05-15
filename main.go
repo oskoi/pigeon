@@ -52,6 +52,8 @@ func main() {
 		noBuildFlag            = fs.Bool("x", false, "do not build, only parse")
 		supportLeftRecursion   = fs.Bool("support-left-recursion", false, "add support left recursion (EXPERIMENTAL FEATURE)")
 
+		// runFuncPrefixFlag = fs.String("run-func-prefix", "", "set prefix for generated function name: `(*parser).call_onXXX`. For multiple peg files")
+		// grammarOnlyFlag        = fs.Bool("grammar-only", false, "use it when you have multiple peg files")
 		optimizeRefExprByIndex = fs.Bool("optimize-ref-expr-by-index", false, "generate optimized parser grammar find RefExpr by index (~10% increased)")
 
 		//optimizeGrammar        = fs.Bool("optimize-grammar", false, "optimize the given grammar (EXPERIMENTAL FEATURE)")
