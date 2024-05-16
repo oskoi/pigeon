@@ -38,19 +38,20 @@ var (
 	errMaxExprCnt = errors.New("max number of expressions parsed")
 )
 
-type parserStack[T any] struct {
-	data     []T
+// remove generic because it can't be compiled by gopherjs
+type parserStack struct {
+	data     []savepoint
 	index    int
 	size     int
 }
 
-func (ss *parserStack[T]) init(size int) {
+func (ss *parserStack) init(size int) {
 	ss.index = -1
-	ss.data = make([]T, size)
+	ss.data = make([]savepoint, size)
 	ss.size = size
 }
 
-func (ss *parserStack[T]) push(v *T) {
+func (ss *parserStack) push(v *savepoint) {
 	ss.index += 1
 	if ss.index == ss.size {
 		ss.data = append(ss.data, *v)
@@ -60,17 +61,13 @@ func (ss *parserStack[T]) push(v *T) {
 	}
 }
 
-func (ss *parserStack[T]) pop() *T {
+func (ss *parserStack) pop() *savepoint {
 	ref := &ss.data[ss.index]
-	ss.index --
+	ss.index--
 	return ref
 }
 
-func (ss *parserStack[T]) setTop(t T) {
-	ss.data[ss.index] = t
-}
-
-func (ss *parserStack[T]) top() *T {
+func (ss *parserStack) top() *savepoint {
 	return &ss.data[ss.index]
 }
 
@@ -334,7 +331,7 @@ type charClassMatcher struct {
 	inverted        bool
 }
 
-type anyMatcher position //{{ if .Nolint }} nolint: structcheck {{else}} ==template== {{ end }}
+type anyMatcher struct{} //{{ if .Nolint }} nolint: structcheck {{else}} ==template== {{ end }}
 
 // errList cumulates the errors found by the parser.
 type errList []error
@@ -529,7 +526,7 @@ type parser struct {
 	// skip code stack
 	scStack []bool
 	// save point stack
-	spStack parserStack[savepoint]
+	spStack parserStack
 }
 
 // push a variable set on the vstack.
@@ -688,7 +685,7 @@ func (p *parser) read() {
 }
 
 // restore parser position to the savepoint pt.
-func (p *parser) restore(pt savepoint) {
+func (p *parser) restore(pt *savepoint) {
 	// ==template== {{ if not .Optimize }}
 	if p.debug {
 		defer p.out(p.in("restore"))
@@ -697,7 +694,7 @@ func (p *parser) restore(pt savepoint) {
 	if pt.offset == p.pt.offset {
 		return
 	}
-	p.pt = pt
+	p.pt = *pt
 }
 
 // get the slice of bytes from the savepoint start to the current position.
@@ -1064,16 +1061,16 @@ func (p *parser) parseActionExpr(act *actionExpr) (any, bool) {
 	}
 
 	// {{ end }} ==template==
-	skipCode := p.checkSkipCode()
-	if !skipCode {
-		p.spStack.push(&p.pt)
+	if p.checkSkipCode() {
+		_, ok := p.parseExprWrap(act.expr)
+		return nil, ok
 	}
+
+	p.spStack.push(&p.pt)
 	val, ok := p.parseExprWrap(act.expr)
+	start := p.spStack.pop()
+
 	if ok {
-		if skipCode {
-			return nil, true
-		}
-		start := p.spStack.pop()
 		p.cur.pos = start.position
 		p.cur.text = p.sliceFrom(start)
 		p._errPos = &start.position
@@ -1117,7 +1114,7 @@ func (p *parser) parseAndExpr(and *andExpr, logical bool) (any, bool) {
 
 	matchedOffset := p.pt.offset
 	p.popV()
-	p.restore(pt)
+	p.restore(&pt)
 
 	if logical {
 		return nil, ok && p.pt.offset != matchedOffset
@@ -1137,10 +1134,9 @@ func (p *parser) parseAnyMatcher(any *anyMatcher) (any, bool) {
 		p.failAt(false, &p.pt.position, ".")
 		return nil, false
 	}
-	startOffset := p.pt.offset
 	p.failAt(true, &p.pt.position, ".")
 	p.read()
-	return p.sliceFromOffset(startOffset), true
+	return nil, true
 }
 
 // {{ if .Nolint }} nolint: gocyclo {{else}} ==template== {{ end }}
@@ -1170,10 +1166,9 @@ func (p *parser) parseCharClassMatcher(chr *charClassMatcher) (any, bool) {
 				p.failAt(false, &p.pt.position, chr.val)
 				return nil, false
 			}
-			offset := p.pt.position.offset
 			p.failAt(true, &p.pt.position, chr.val)
 			p.read()
-			return p.sliceFromOffset(offset), true
+			return nil, true
 		}
 	}
 
@@ -1184,10 +1179,9 @@ func (p *parser) parseCharClassMatcher(chr *charClassMatcher) (any, bool) {
 				p.failAt(false, &p.pt.position, chr.val)
 				return nil, false
 			}
-			offset := p.pt.position.offset
 			p.failAt(true, &p.pt.position, chr.val)
 			p.read()
-			return p.sliceFromOffset(offset), true
+			return nil, true
 		}
 	}
 
@@ -1198,18 +1192,16 @@ func (p *parser) parseCharClassMatcher(chr *charClassMatcher) (any, bool) {
 				p.failAt(false, &p.pt.position, chr.val)
 				return nil, false
 			}
-			offset := p.pt.position.offset
 			p.failAt(true, &p.pt.position, chr.val)
 			p.read()
-			return p.sliceFromOffset(offset), true
+			return nil, true
 		}
 	}
 
 	if chr.inverted {
-		offset := p.pt.position.offset
 		p.failAt(true, &p.pt.position, chr.val)
 		p.read()
-		return p.sliceFromOffset(offset), true
+		return nil, true
 	}
 	p.failAt(false, &p.pt.position, chr.val)
 	return nil, false
@@ -1313,13 +1305,13 @@ func (p *parser) parseLitMatcher(lit *litMatcher) (any, bool) {
 		}
 		if cur != want {
 			p.failAt(false, &start.position, lit.want)
-			p.restore(start)
+			p.restore(&start)
 			return nil, false
 		}
 		p.read()
 	}
 	p.failAt(true, &start.position, lit.want)
-	return p.sliceFrom(&start), true
+	return nil, true
 }
 
 func (p *parser) parseNotCodeExpr(not *notCodeExpr) (any, bool) {
@@ -1351,7 +1343,7 @@ func (p *parser) parseNotExpr(not *notExpr, logical bool) (any, bool) {
 	p.maxFailInvertExpected = !p.maxFailInvertExpected
 	p.popV()
 	matchedOffset := p.pt.offset
-	p.restore(pt)
+	p.restore(&pt)
 
 	if logical {
 		return nil, ok && p.pt.offset != matchedOffset
@@ -1367,18 +1359,21 @@ func (p *parser) parseOneOrMoreExpr(expr *oneOrMoreExpr) (any, bool) {
 
 	// {{ end }} ==template==
 	var vals []any
+	var matched bool
 	for {
 		p.pushV()
 		val, ok := p.parseExprWrap(expr.expr)
 		p.popV()
 		if !ok {
-			if len(vals) == 0 {
-				// did not match once, no match
-				return nil, false
+			if len(vals) > 0 {
+				return vals, matched
 			}
-			return vals, true
+			return nil, matched
 		}
-		vals = append(vals, val)
+		matched = true
+		if val != nil {
+			vals = append(vals, val)
+		}
 	}
 }
 
@@ -1431,19 +1426,23 @@ func (p *parser) parseSeqExpr(seq *seqExpr) (any, bool) {
 
 	// {{ end }} ==template==
 	var vals []any
+	notSkipCode := p.checkSkipCode()
 
 	pt := p.pt
 	for _, expr := range seq.exprs {
 		val, ok := p.parseExprWrap(expr)
 		if !ok {
-			p.restore(pt)
+			p.restore(&pt)
 			return nil, false
 		}
-		if val != nil && !p.checkSkipCode() {
+		if notSkipCode && val != nil {
 			vals = append(vals, val)
 		}
 	}
-	return vals, true
+	if len(vals) > 0 {
+		return vals, true
+	}
+	return nil, true
 }
 
 func (p *parser) parseThrowExpr(expr *throwExpr) (any, bool) {
@@ -1476,9 +1475,14 @@ func (p *parser) parseZeroOrMoreExpr(expr *zeroOrMoreExpr) (any, bool) {
 		val, ok := p.parseExprWrap(expr.expr)
 		p.popV()
 		if !ok {
-			return vals, true
+			if len(vals) > 0 {
+				return vals, true
+			}
+			return nil, true
 		}
-		vals = append(vals, val)
+		if val != nil {
+			vals = append(vals, val)
+		}
 	}
 }
 

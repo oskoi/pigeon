@@ -391,10 +391,11 @@ func (b *builder) writeAnyMatcher(any *ast.AnyMatcher) {
 		b.writelnf("nil,")
 		return
 	}
-	b.writelnf("&anyMatcher{")
-	pos := any.Pos()
-	b.writelnf("\tline: %d, col: %d, offset: %d,", pos.Line, pos.Col, pos.Off)
-	b.writelnf("},")
+	b.writelnf("&anyMatcher{},")
+	// b.writelnf("&anyMatcher{")
+	// pos := any.Pos()
+	// b.writelnf("\tline: %d, col: %d, offset: %d,", pos.Line, pos.Col, pos.Off)
+	// b.writelnf("},")
 }
 func (b *builder) writeActionExpr(act *ast.ActionExpr) {
 	if act == nil {
