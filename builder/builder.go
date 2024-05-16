@@ -145,6 +145,7 @@ type builder struct {
 	optimize          bool
 	globalState       bool
 	nolint            bool
+	setRulePos        bool
 	haveLeftRecursion bool
 
 	ruleName  string
@@ -242,8 +243,9 @@ func (b *builder) writeGrammar2(g *ast.Grammar) {
 }
 
 func (b *builder) writeRulePos(pos ast.Pos) {
-	// SetRulePos
-	// b.writelnf("\tpos: position{line: %d, col: %d, offset: %d},", pos.Line, pos.Col, pos.Off)
+	if b.setRulePos {
+		b.writelnf("\tpos: position{line: %d, col: %d, offset: %d},", pos.Line, pos.Col, pos.Off)
+	}
 }
 
 func (b *builder) writeRule(r *ast.Rule) {
@@ -391,11 +393,15 @@ func (b *builder) writeAnyMatcher(any *ast.AnyMatcher) {
 		b.writelnf("nil,")
 		return
 	}
-	b.writelnf("&anyMatcher{},")
-	// b.writelnf("&anyMatcher{")
-	// pos := any.Pos()
-	// b.writelnf("\tline: %d, col: %d, offset: %d,", pos.Line, pos.Col, pos.Off)
-	// b.writelnf("},")
+
+	if b.setRulePos {
+		b.writelnf("&anyMatcher{")
+		pos := any.Pos()
+		b.writelnf("\tline: %d, col: %d, offset: %d,", pos.Line, pos.Col, pos.Off)
+		b.writelnf("},")
+	} else {
+		b.writelnf("&anyMatcher{},")
+	}
 }
 func (b *builder) writeActionExpr(act *ast.ActionExpr) {
 	if act == nil {
@@ -468,8 +474,12 @@ func (b *builder) writeCharClassMatcher(ch *ast.CharClassMatcher) {
 		}
 		b.writelnf("},")
 	}
-	b.writelnf("\tignoreCase: %t,", ch.IgnoreCase)
-	b.writelnf("\tinverted: %t,", ch.Inverted)
+	if ch.IgnoreCase {
+		b.writelnf("\tignoreCase: %t,", ch.IgnoreCase)
+	}
+	if ch.Inverted {
+		b.writelnf("\tinverted: %t,", ch.Inverted)
+	}
 	b.writelnf("},")
 }
 
@@ -573,20 +583,28 @@ func (b *builder) writeLitMatcher(lit *ast.LitMatcher) {
 		b.writelnf("nil,")
 		return
 	}
-	b.writelnf("&litMatcher{")
+
+	writeFunc := b.writef
+	if b.setRulePos {
+		writeFunc = b.writelnf
+	}
+
+	writeFunc("&litMatcher{")
 	pos := lit.Pos()
 	b.writeRulePos(pos)
 	if lit.IgnoreCase {
-		b.writelnf("\tval: %q,", strings.ToLower(lit.Val))
+		writeFunc("\tval: %q,", strings.ToLower(lit.Val))
 	} else {
-		b.writelnf("\tval: %q,", lit.Val)
+		writeFunc("\tval: %q,", lit.Val)
 	}
-	b.writelnf("\tignoreCase: %t,", lit.IgnoreCase)
+	if lit.IgnoreCase {
+		writeFunc("\tignoreCase: %t,", lit.IgnoreCase)
+	}
 	ignoreCaseFlag := ""
 	if lit.IgnoreCase {
 		ignoreCaseFlag = "i"
 	}
-	b.writelnf("\twant: %q,", strconv.Quote(lit.Val)+ignoreCaseFlag)
+	writeFunc("\twant: %q,", strconv.Quote(lit.Val)+ignoreCaseFlag)
 	b.writelnf("},")
 }
 
@@ -959,7 +977,7 @@ func (b *builder) writeStaticCode() {
 	}{
 		Optimize:       b.optimize,
 		Nolint:         b.nolint,
-		SetRulePos:     false,
+		SetRulePos:     b.setRulePos,
 		Entrypoint:     b.entrypoint,
 		GrammarMap:     b.grammarMap,
 		IRefEnable:     b.iRefEnable,

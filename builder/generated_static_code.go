@@ -313,7 +313,11 @@ type charClassMatcher struct {
 	inverted        bool
 }
 
+// ==template== {{ if .SetRulePos }}
+type anyMatcher position //{{ if .Nolint }} nolint: structcheck {{else}} ==template== {{ end }}
+// {{ else }} ==template==
 type anyMatcher struct{} //{{ if .Nolint }} nolint: structcheck {{else}} ==template== {{ end }}
+// {{ end }} ==template==
 
 // errList cumulates the errors found by the parser.
 type errList []error

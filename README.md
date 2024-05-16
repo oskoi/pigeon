@@ -11,10 +11,10 @@ See the [godoc page][3] for detailed usage. Also have a look at the [Pigeon Wiki
 
 ## Features for this fork
 
-* Performance tweak, 10-20x faster than original version(with some trade off).
+* Performance tweak, 5-10x faster than original version(with some trade off).
   * `parser.state` is removed, because it's very slow.
   * `parseSeqExpr` only collect not nil values now. Mainly for performance improvement. For example: `e <- Expr __ Plus __ Expr` returns \[expr, '+', expr], original version return \[expr, nil, '+', nil, expr].
-  * Generated parser has less memory allocated.
+  * Generated parser do less memory allocated.
   * Generated parser uses fewer lines of code.
 
 * Multiple peg files supported.
@@ -24,7 +24,7 @@ See the [godoc page][3] for detailed usage. Also have a look at the [Pigeon Wiki
 
 
 * `actionExpr` is different
-  * Only needs to return one value. Moreover, this is not required. If the return statement is not written, it will automatically return c.text. Examples:
+  * Only needs to return one value. Moreover, this is not required. If the return statement is not written, it will automatically return nil. Examples:
     * `expr <- [0-9]+ { fmt.Println(expr) }` is ok in this fork.
     * `expr <- "true" { return 1 }` if you want return something.
   * If you want to add an error by manual, do this:
@@ -57,6 +57,7 @@ See the [godoc page][3] for detailed usage. Also have a look at the [Pigeon Wiki
 * Provide a struct(`ParserCustomData`) to embed, to replace the globalStore
   * Must define a struct `ParserCustomData` in your module.
   * Access data by `c.data`, for example: `expr <- { fmt.Println(c.data.MyOption) }`
+  * `globalState` is removed.
 
 * `position` of generated code is removed 
   * It produced a lot of different for version control.
@@ -74,6 +75,9 @@ See the [godoc page][3] for detailed usage. Also have a look at the [Pigeon Wiki
 
 * Removed `-optimize-basic-latin` option
   * Because there is no evidence to suggest that this is an optimization
+
+* `charClassMatcher` / `anyMatcher` / `litMatcher` not return byte anymore, because of performance.
+  * Use string capture or `c.text` instead.
 
 ## Releases
 
