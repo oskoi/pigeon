@@ -165,9 +165,9 @@ func TestNastyMutuallyLeftRecursive(t *testing.T) {
 	t.Parallel()
 
 	text := `
-	start = target '='
-    target = maybe '+' / NAME
-    maybe = maybe '-' / target
+	start = Target '='
+    Target = maybe '+' / NAME
+    maybe = maybe '-' / Target
 	`
 	p := bootstrap.NewParser()
 	grammar, err := p.Parse("", strings.NewReader(text))
@@ -188,8 +188,8 @@ func TestNastyMutuallyLeftRecursive(t *testing.T) {
 	if mapRules["start"].LeftRecursive {
 		t.Error("Rule 'start' does not contain left recursion")
 	}
-	if !mapRules["target"].LeftRecursive {
-		t.Error("Rule 'target' contains left recursion")
+	if !mapRules["Target"].LeftRecursive {
+		t.Error("Rule 'Target' contains left recursion")
 	}
 	if !mapRules["maybe"].LeftRecursive {
 		t.Error("Rule 'maybe' contains left recursion")

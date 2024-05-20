@@ -7,7 +7,7 @@ import (
 	"github.com/fy0/pigeon/testutils"
 )
 
-func TestStronglyConnectedComponents(t *testing.T) { //nolint:funlen
+func TestStronglyConnectedComponents(t *testing.T) { //Nolint:funlen
 	t.Parallel()
 
 	type want struct {
@@ -112,7 +112,7 @@ func TestStronglyConnectedComponents(t *testing.T) { //nolint:funlen
 	}
 }
 
-func TestFindCyclesInSCC(t *testing.T) { //nolint:funlen
+func TestFindCyclesInSCC(t *testing.T) { //Nolint:funlen
 	t.Parallel()
 
 	type want struct {
