@@ -137,6 +137,7 @@ func Nolint(nolint bool) Option {
 // written to the specified W.
 func BuildParser(w io.Writer, g *ast.Grammar, opts ...Option) error {
 	b := &Builder{W: w, RecvName: "c", Target: "go"}
+	b.GetExprInfo = GetExprInfo
 	b.Init()
 	b.SetOptions(opts)
 	return b.BuildParser(g)
@@ -171,7 +172,51 @@ type Builder struct {
 
 	RuleName2Index map[string]*ExprInfo
 
-	Shims OverrideShims
+	Shims       OverrideShims
+	GetExprInfo func(expr ast.Expression) *ExprInfo
+}
+
+func GetExprInfo(expr ast.Expression) *ExprInfo {
+	switch expr.(type) {
+	case *ast.ActionExpr:
+		return &ExprInfo{ExprType: "actionExpr"}
+	case *ast.AndCodeExpr:
+		return &ExprInfo{ExprType: "andCodeExpr"}
+	case *ast.AndExpr:
+		return &ExprInfo{ExprType: "andExpr"}
+	case *ast.AnyMatcher:
+		return &ExprInfo{ExprType: "anyMatcher"}
+	case *ast.CharClassMatcher:
+		return &ExprInfo{ExprType: "charClassMatcher"}
+	case *ast.ChoiceExpr:
+		return &ExprInfo{ExprType: "choiceExpr"}
+	case *ast.LabeledExpr:
+		return &ExprInfo{ExprType: "labeledExpr"}
+	case *ast.LitMatcher:
+		return &ExprInfo{ExprType: "litMatcher"}
+	case *ast.NotCodeExpr:
+		return &ExprInfo{ExprType: "notCodeExpr"}
+	case *ast.NotExpr:
+		return &ExprInfo{ExprType: "notExpr"}
+	case *ast.OneOrMoreExpr:
+		return &ExprInfo{ExprType: "oneOrMoreExpr"}
+	case *ast.RecoveryExpr:
+		return &ExprInfo{ExprType: "recoveryExpr"}
+	case *ast.RuleRefExpr:
+		return &ExprInfo{ExprType: "ruleRefExpr"}
+	case *ast.SeqExpr:
+		return &ExprInfo{ExprType: "seqExpr"}
+	case *ast.CodeExpr:
+		return &ExprInfo{ExprType: "codeExpr"}
+	case *ast.ThrowExpr:
+		return &ExprInfo{ExprType: "throwExpr"}
+	case *ast.ZeroOrMoreExpr:
+		return &ExprInfo{ExprType: "zeroOrMoreExpr"}
+	case *ast.ZeroOrOneExpr:
+		return &ExprInfo{ExprType: "zeroOrOneExpr"}
+	default:
+		return nil
+	}
 }
 
 func (b *Builder) SetOptions(opts []Option) {
@@ -207,541 +252,6 @@ func (b *Builder) BuildParser(grammar *ast.Grammar) error {
 	return b.Err
 }
 
-func (b *Builder) Init() {
-	b.Shims.WriteInit = func(b *Builder, init *ast.CodeBlock) {
-		if init == nil {
-			return
-		}
-
-		// remove opening and closing braces
-		val := codeGeneratedComment + b.TemplateRender(init.Val[1:len(init.Val)-1], false)
-		b.Writelnf("%s", val)
-	}
-
-	b.Shims.WriteGrammar = func(b *Builder, g *ast.Grammar) {
-		// transform the ast grammar to the self-contained, no dependency version
-		// of the parser-generator grammar.
-
-		m := map[string]*ExprInfo{}
-
-		for index, r := range g.Rules {
-			info := b.GetExprInfo(r.Expr)
-			info.Index = index
-			m[r.Name.Val] = info
-		}
-		b.RuleName2Index = m
-
-		b.Writelnf("var %s = &grammar {", b.GrammarName)
-		b.Writelnf("\trules: []*rule{")
-		for _, r := range g.Rules {
-			b.WriteRule(r)
-		}
-		b.Writelnf("\t},")
-		b.Writelnf("}")
-	}
-
-	b.Shims.WriteGrammar2 = func(b *Builder, g *ast.Grammar) {
-		// transform the ast grammar to the self-contained, no dependency version
-		// of the parser-generator grammar.
-		b.Writelnf("var g = map[string]*rule {")
-		for _, r := range g.Rules {
-			b.WriteRule(r)
-		}
-		b.Writelnf("}")
-	}
-
-	b.Shims.WriteRule = func(b *Builder, r *ast.Rule) {
-		if r == nil || r.Name == nil {
-			return
-		}
-
-		b.ExprIndex = 0
-		b.RuleName = r.Name.Val
-
-		if b.Entrypoint == "" {
-			b.Entrypoint = r.Name.Val
-		}
-
-		if b.GrammarMap {
-			b.Writelnf("%q: {", r.Name.Val)
-		} else {
-			b.Writelnf("{")
-		}
-		b.Writelnf("\tname: %q,", r.Name.Val)
-		if r.DisplayName != nil && r.DisplayName.Val != "" {
-			b.Writelnf("\tdisplayName: %q,", r.DisplayName.Val)
-		}
-		b.WriteRulePos(r.Pos())
-		b.Writef("\texpr: ")
-		b.WriteExpr(r.Expr)
-		if b.HaveLeftRecursion {
-			b.Writelnf("\tleader: %t,", r.Leader)
-			b.Writelnf("\tleftRecursive: %t,", r.LeftRecursive)
-		}
-		b.Writelnf("},")
-	}
-
-	b.Shims.GetExprInfo = func(b *Builder, expr ast.Expression) *ExprInfo {
-		switch expr.(type) {
-		case *ast.ActionExpr:
-			return &ExprInfo{ExprType: "actionExpr"}
-		case *ast.AndCodeExpr:
-			return &ExprInfo{ExprType: "andCodeExpr"}
-		case *ast.AndExpr:
-			return &ExprInfo{ExprType: "andExpr"}
-		case *ast.AnyMatcher:
-			return &ExprInfo{ExprType: "anyMatcher"}
-		case *ast.CharClassMatcher:
-			return &ExprInfo{ExprType: "charClassMatcher"}
-		case *ast.ChoiceExpr:
-			return &ExprInfo{ExprType: "choiceExpr"}
-		case *ast.LabeledExpr:
-			return &ExprInfo{ExprType: "labeledExpr"}
-		case *ast.LitMatcher:
-			return &ExprInfo{ExprType: "litMatcher"}
-		case *ast.NotCodeExpr:
-			return &ExprInfo{ExprType: "notCodeExpr"}
-		case *ast.NotExpr:
-			return &ExprInfo{ExprType: "notExpr"}
-		case *ast.OneOrMoreExpr:
-			return &ExprInfo{ExprType: "oneOrMoreExpr"}
-		case *ast.RecoveryExpr:
-			return &ExprInfo{ExprType: "recoveryExpr"}
-		case *ast.RuleRefExpr:
-			return &ExprInfo{ExprType: "ruleRefExpr"}
-		case *ast.SeqExpr:
-			return &ExprInfo{ExprType: "seqExpr"}
-		case *ast.CodeExpr:
-			return &ExprInfo{ExprType: "codeExpr"}
-		case *ast.ThrowExpr:
-			return &ExprInfo{ExprType: "throwExpr"}
-		case *ast.ZeroOrMoreExpr:
-			return &ExprInfo{ExprType: "zeroOrMoreExpr"}
-		case *ast.ZeroOrOneExpr:
-			return &ExprInfo{ExprType: "zeroOrOneExpr"}
-		default:
-			return nil
-		}
-	}
-
-	b.Shims.WriteAndExpr = func(b *Builder, and *ast.AndExpr) {
-		if and == nil {
-			b.Writelnf("nil,")
-			return
-		}
-		if and.Logical {
-			b.Writelnf("&andLogicalExpr{")
-		} else {
-			b.Writelnf("&andExpr{")
-		}
-		b.WriteRulePos(and.Pos())
-		b.Writef("\texpr: ")
-		b.WriteExpr(and.Expr)
-		b.Writelnf("},")
-	}
-
-	b.Shims.WriteAnyMatcher = func(b *Builder, any *ast.AnyMatcher) {
-		if any == nil {
-			b.Writelnf("nil,")
-			return
-		}
-
-		if b.SetRulePos {
-			b.Writelnf("&anyMatcher{")
-			pos := any.Pos()
-			b.Writelnf("\tline: %d, col: %d, offset: %d,", pos.Line, pos.Col, pos.Off)
-			b.Writelnf("},")
-		} else {
-			b.Writelnf("&anyMatcher{},")
-		}
-	}
-
-	b.Shims.WriteActionExpr = func(b *Builder, act *ast.ActionExpr) {
-		if act == nil {
-			b.Writelnf("nil,")
-			return
-		}
-		if act.FuncIx == 0 {
-			act.FuncIx = b.ExprIndex
-		}
-		b.Writelnf("&actionExpr{")
-		b.WriteRulePos(act.Pos())
-		b.Writelnf("\trun: (*parser).call%s,", b.funcName(act.FuncIx))
-		b.Writef("\texpr: ")
-		b.WriteExpr(act.Expr)
-		b.Writelnf("},")
-	}
-
-	b.Shims.WriteAndCodeExpr = func(b *Builder, and *ast.AndCodeExpr) {
-		if and == nil {
-			b.Writelnf("nil,")
-			return
-		}
-		b.Writef("&andCodeExpr{")
-		pos := and.Pos()
-		if and.FuncIx == 0 {
-			and.FuncIx = b.ExprIndex
-		}
-		b.WriteRulePos(pos)
-		b.Writef("\trun: (*parser).call%s,", b.funcName(and.FuncIx))
-		b.Writelnf("},")
-	}
-
-	b.Shims.WriteCharClassMatcher = func(b *Builder, ch *ast.CharClassMatcher) {
-		if ch == nil {
-			b.Writelnf("nil,")
-			return
-		}
-		b.Writelnf("&charClassMatcher{")
-		pos := ch.Pos()
-		b.WriteRulePos(pos)
-		b.Writelnf("\tval: %q,", ch.Val)
-		if len(ch.Chars) > 0 {
-			b.Writef("\tchars: []rune{")
-			for _, rn := range ch.Chars {
-				if ch.IgnoreCase {
-					b.Writef("%q,", unicode.ToLower(rn))
-				} else {
-					b.Writef("%q,", rn)
-				}
-			}
-			b.Writelnf("},")
-		}
-		if len(ch.Ranges) > 0 {
-			b.Writef("\tranges: []rune{")
-			for _, rn := range ch.Ranges {
-				if ch.IgnoreCase {
-					b.Writef("%q,", unicode.ToLower(rn))
-				} else {
-					b.Writef("%q,", rn)
-				}
-			}
-			b.Writelnf("},")
-		}
-		if len(ch.UnicodeClasses) > 0 {
-			b.RangeTable = true
-			b.Writef("\tclasses: []*unicode.RangeTable{")
-			for _, cl := range ch.UnicodeClasses {
-				// b.Writef("RangeTable(%q),", cl)
-				b.Writef("unicode.%s,", cl)
-			}
-			b.Writelnf("},")
-		}
-		if ch.IgnoreCase {
-			b.Writelnf("\tignoreCase: %t,", ch.IgnoreCase)
-		}
-		if ch.Inverted {
-			b.Writelnf("\tinverted: %t,", ch.Inverted)
-		}
-		b.Writelnf("},")
-	}
-
-	b.Shims.WriteCodeExpr = func(b *Builder, state *ast.CodeExpr) {
-		if state == nil {
-			b.Writelnf("nil,")
-			return
-		}
-		b.Writelnf("&codeExpr{")
-		pos := state.Pos()
-		if state.FuncIx == 0 {
-			state.FuncIx = b.ExprIndex
-		}
-		b.WriteRulePos(pos)
-		b.Writelnf("\trun: (*parser).call%s,", b.funcName(state.FuncIx))
-		if state.NotSkip {
-			b.Writelnf("\tnotSkip: %v,", state.NotSkip)
-		}
-		b.Writelnf("},")
-	}
-
-	b.Shims.WriteChoiceExpr = func(b *Builder, ch *ast.ChoiceExpr) {
-		if ch == nil {
-			b.Writelnf("nil,")
-			return
-		}
-		b.Writelnf("&choiceExpr{")
-		pos := ch.Pos()
-		b.WriteRulePos(pos)
-		if len(ch.Alternatives) > 0 {
-			b.Writelnf("\talternatives: []any{")
-			for _, alt := range ch.Alternatives {
-				b.WriteExpr(alt)
-			}
-			b.Writelnf("\t},")
-		}
-		b.Writelnf("},")
-	}
-
-	b.Shims.WriteLabeledExpr = func(b *Builder, lab *ast.LabeledExpr) {
-		if lab == nil {
-			b.Writelnf("nil,")
-			return
-		}
-		b.Writelnf("&labeledExpr{")
-		pos := lab.Pos()
-		b.WriteRulePos(pos)
-		if lab.Label != nil && lab.Label.Val != "" {
-			b.Writelnf("\tlabel: %q,", lab.Label.Val)
-		}
-		b.Writef("\texpr: ")
-		b.WriteExpr(lab.Expr)
-		if lab.TextCapture {
-			b.Writelnf("\ttextCapture: %v,", lab.TextCapture)
-		}
-		b.Writelnf("},")
-	}
-
-	b.Shims.WriteLitMatcher = func(b *Builder, lit *ast.LitMatcher) {
-		if lit == nil {
-			b.Writelnf("nil,")
-			return
-		}
-
-		writeFunc := b.Writef
-		if b.SetRulePos {
-			writeFunc = b.Writelnf
-		}
-
-		writeFunc("&litMatcher{")
-		pos := lit.Pos()
-		b.WriteRulePos(pos)
-		if lit.IgnoreCase {
-			writeFunc("\tval: %q,", strings.ToLower(lit.Val))
-		} else {
-			writeFunc("\tval: %q,", lit.Val)
-		}
-		if lit.IgnoreCase {
-			writeFunc("\tignoreCase: %t,", lit.IgnoreCase)
-		}
-		ignoreCaseFlag := ""
-		if lit.IgnoreCase {
-			ignoreCaseFlag = "i"
-		}
-		writeFunc("\twant: %q,", strconv.Quote(lit.Val)+ignoreCaseFlag)
-		b.Writelnf("},")
-	}
-
-	b.Shims.WriteNotCodeExpr = func(b *Builder, not *ast.NotCodeExpr) {
-		if not == nil {
-			b.Writelnf("nil,")
-			return
-		}
-		b.Writef("&notCodeExpr{")
-		pos := not.Pos()
-		if not.FuncIx == 0 {
-			not.FuncIx = b.ExprIndex
-		}
-		b.WriteRulePos(pos)
-		b.Writef("\trun: (*parser).call%s,", b.funcName(not.FuncIx))
-		b.Writelnf("},")
-	}
-
-	b.Shims.WriteNotExpr = func(b *Builder, not *ast.NotExpr) {
-		if not == nil {
-			b.Writelnf("nil,")
-			return
-		}
-		if not.Logical {
-			b.Writelnf("&notLogicalExpr{")
-		} else {
-			b.Writelnf("&notExpr{")
-		}
-		pos := not.Pos()
-		b.WriteRulePos(pos)
-		b.Writef("\texpr: ")
-		b.WriteExpr(not.Expr)
-		b.Writelnf("},")
-	}
-
-	b.Shims.WriteOneOrMoreExpr = func(b *Builder, one *ast.OneOrMoreExpr) {
-		if one == nil {
-			b.Writelnf("nil,")
-			return
-		}
-		b.Writelnf("&oneOrMoreExpr{")
-		pos := one.Pos()
-		b.WriteRulePos(pos)
-		b.Writef("\texpr: ")
-		b.WriteExpr(one.Expr)
-		b.Writelnf("},")
-	}
-
-	b.Shims.WriteRecoveryExpr = func(b *Builder, recover *ast.RecoveryExpr) {
-		if recover == nil {
-			b.Writelnf("nil,")
-			return
-		}
-		b.Writelnf("&recoveryExpr{")
-		pos := recover.Pos()
-		b.WriteRulePos(pos)
-
-		b.Writef("\texpr: ")
-		b.WriteExpr(recover.Expr)
-		b.Writef("\trecoverExpr: ")
-		b.WriteExpr(recover.RecoverExpr)
-		b.Writelnf("\tfailureLabel: []string{")
-		for _, label := range recover.Labels {
-			b.Writelnf("%q,", label)
-		}
-		b.Writelnf("\t},")
-		b.Writelnf("},")
-	}
-
-	b.Shims.WriteRuleRefExpr = func(b *Builder, ref *ast.RuleRefExpr) {
-		if ref == nil {
-			b.Writelnf("nil,")
-			return
-		}
-		if b.IRefEnable {
-			if b.IRefCodeEnable {
-				b.Writef("&ruleIRefExprX{")
-			} else {
-				b.Writef("&ruleIRefExpr{")
-			}
-			pos := ref.Pos()
-			b.WriteRulePos(pos)
-			if ref.Name != nil && ref.Name.Val != "" {
-				info := b.RuleName2Index[ref.Name.Val]
-				b.Writef("\tindex: %d /* %s */", info.Index, ref.Name.Val)
-
-				if b.IRefCodeEnable {
-					exprType := info.ExprType
-					if exprType == "ruleRefExpr" {
-						exprType = "ruleIRefExprX"
-					}
-					parseFnName := "parse" + strings.ToUpper(exprType[:1]) + exprType[1:]
-					b.Writef(", call: func(p*parser, expr any) (any, bool) { return p.%s(expr.(*rule).expr.(*%s)) }", parseFnName, exprType)
-				}
-			}
-			b.Writelnf("},")
-		} else {
-			b.Writef("&ruleRefExpr{")
-			pos := ref.Pos()
-			b.WriteRulePos(pos)
-			if ref.Name != nil && ref.Name.Val != "" {
-				b.Writef("\tname: %q,", ref.Name.Val)
-			}
-			b.Writelnf("},")
-		}
-	}
-
-	b.Shims.WriteSeqExpr = func(b *Builder, seq *ast.SeqExpr) {
-		if seq == nil {
-			b.Writelnf("nil,")
-			return
-		}
-		b.Writelnf("&seqExpr{")
-		pos := seq.Pos()
-		b.WriteRulePos(pos)
-		if len(seq.Exprs) > 0 {
-			b.Writelnf("\texprs: []any{")
-			for _, e := range seq.Exprs {
-				b.WriteExpr(e)
-			}
-			b.Writelnf("\t},")
-		}
-		b.Writelnf("},")
-	}
-
-	b.Shims.WriteThrowExpr = func(b *Builder, throw *ast.ThrowExpr) {
-		if throw == nil {
-			b.Writelnf("nil,")
-			return
-		}
-		b.Writelnf("&throwExpr{")
-		pos := throw.Pos()
-		b.WriteRulePos(pos)
-		b.Writelnf("\tlabel: %q,", throw.Label)
-		b.Writelnf("},")
-	}
-
-	b.Shims.WriteZeroOrMoreExpr = func(b *Builder, zero *ast.ZeroOrMoreExpr) {
-		if zero == nil {
-			b.Writelnf("nil,")
-			return
-		}
-		b.Writelnf("&zeroOrMoreExpr{")
-		pos := zero.Pos()
-		b.WriteRulePos(pos)
-		b.Writef("\texpr: ")
-		b.WriteExpr(zero.Expr)
-		b.Writelnf("},")
-	}
-
-	b.Shims.WriteZeroOrOneExpr = func(b *Builder, zero *ast.ZeroOrOneExpr) {
-		if zero == nil {
-			b.Writelnf("nil,")
-			return
-		}
-		b.Writelnf("&zeroOrOneExpr{")
-		pos := zero.Pos()
-		b.WriteRulePos(pos)
-		b.Writef("\texpr: ")
-		b.WriteExpr(zero.Expr)
-		b.Writelnf("},")
-	}
-
-	b.Shims.WriteFunc = func(b *Builder, funcIx int, code *ast.CodeBlock, funcTpl string) {
-		if code == nil {
-			return
-		}
-		val := b.TemplateRender(strings.TrimSpace(code.Val)[1:len(code.Val)-1], true)
-		if len(val) > 0 && val[0] == '\n' {
-			val = val[1:]
-		}
-		if len(val) > 0 && val[len(val)-1] == '\n' {
-			val = val[:len(val)-1]
-		}
-		var args bytes.Buffer
-		ix := len(b.ArgsStack) - 1
-		argsInfo := stringArrayUniq(b.ArgsStack[ix])
-		if ix >= 0 {
-			for i, arg := range argsInfo {
-				if i > 0 {
-					args.WriteString(", ")
-				}
-				args.WriteString(arg)
-			}
-		}
-		if args.Len() > 0 {
-			args.WriteString(" any")
-		}
-
-		params := args.String()
-		args.Reset()
-		if ix >= 0 {
-			for i, arg := range argsInfo {
-				if i > 0 {
-					args.WriteString(", ")
-				}
-				args.WriteString(fmt.Sprintf(`stack[%q]`, arg))
-			}
-		}
-
-		b.Writelnf(b.TemplateRenderBase(funcTpl, false, map[string]any{
-			"funcName":   b.funcName(funcIx),
-			"paramsDef":  params,
-			"code":       val,
-			"paramsCall": args.String(),
-			"useStack":   len(argsInfo) > 0,
-		}))
-	}
-
-	b.Shims.WriteRulePos = func(b *Builder, pos ast.Pos) {
-		if b.SetRulePos {
-			b.Writelnf("\tpos: position{line: %d, col: %d, offset: %d},", pos.Line, pos.Col, pos.Off)
-		}
-	}
-
-	b.Shims.WriteStaticCodeWrap = func(b *Builder) {
-		b.WriteStaticCode(staticCode)
-	}
-
-	b.Shims.FuncName = func(b *Builder, ix int) string {
-		return "_on" + b.FuncPrefix + b.RuleName + "_" + strconv.Itoa(ix)
-	}
-}
-
 func (b *Builder) writeInit(init *ast.CodeBlock) {
 	b.Shims.WriteInit(b, init)
 }
@@ -760,10 +270,6 @@ func (b *Builder) WriteRulePos(pos ast.Pos) {
 
 func (b *Builder) WriteRule(r *ast.Rule) {
 	b.Shims.WriteRule(b, r)
-}
-
-func (b *Builder) GetExprInfo(expr ast.Expression) *ExprInfo {
-	return b.Shims.GetExprInfo(b, expr)
 }
 
 func (b *Builder) WriteExpr(expr ast.Expression) {
@@ -1099,6 +605,18 @@ func (b *Builder) funcName(ix int) string {
 	return b.Shims.FuncName(b, ix)
 }
 
+func (b *Builder) WriteArray(typeName string, newline bool, inside func()) {
+	b.Shims.WriteArray(b, typeName, newline, inside)
+}
+
+func (b *Builder) WriteExprBlock(typeName string, newline bool, inside func()) {
+	b.Shims.WriteExprBlock(b, typeName, newline, inside)
+}
+
+func (b *Builder) WriteNilLine() {
+	b.Shims.WriteNilLine(b) // b.WriteNilLine()
+}
+
 func (b *Builder) Writef(f string, args ...any) {
 	if b.Err == nil {
 		_, b.Err = fmt.Fprintf(b.W, f, args...)
@@ -1140,9 +658,545 @@ type OverrideShims struct {
 	WriteZeroOrOneExpr    func(b *Builder, zero *ast.ZeroOrOneExpr)
 	WriteFunc             func(b *Builder, funcIx int, code *ast.CodeBlock, funcTpl string)
 
+	FuncName func(b *Builder, ix int) string
+
+	// These functions must be overloaded for another language target
 	WriteRulePos        func(b *Builder, pos ast.Pos)
 	WriteStaticCodeWrap func(b *Builder)
+	WriteNilLine        func(b *Builder)
+	WriteArray          func(b *Builder, typeName string, newline bool, inside func())
+	WriteExprBlock      func(b *Builder, name string, newline bool, inside func())
+}
 
-	FuncName    func(b *Builder, ix int) string
-	GetExprInfo func(b *Builder, expr ast.Expression) *ExprInfo
+func (b *Builder) Init() {
+	b.Shims.WriteInit = func(b *Builder, init *ast.CodeBlock) {
+		if init == nil {
+			return
+		}
+
+		// remove opening and closing braces
+		val := codeGeneratedComment + b.TemplateRender(init.Val[1:len(init.Val)-1], false)
+		b.Writelnf("%s", val)
+	}
+
+	b.Shims.WriteGrammar = func(b *Builder, g *ast.Grammar) {
+		// transform the ast grammar to the self-contained, no dependency version
+		// of the parser-generator grammar.
+
+		m := map[string]*ExprInfo{}
+
+		for index, r := range g.Rules {
+			info := b.GetExprInfo(r.Expr)
+			info.Index = index
+			m[r.Name.Val] = info
+		}
+		b.RuleName2Index = m
+
+		b.Writelnf("var %s = &grammar {", b.GrammarName)
+		b.Writelnf("\trules: []*rule{")
+		for _, r := range g.Rules {
+			b.WriteRule(r)
+		}
+		b.Writelnf("\t},")
+		b.Writelnf("}")
+	}
+
+	b.Shims.WriteGrammar2 = func(b *Builder, g *ast.Grammar) {
+		// transform the ast grammar to the self-contained, no dependency version
+		// of the parser-generator grammar.
+		b.Writelnf("var g = map[string]*rule {")
+		for _, r := range g.Rules {
+			b.WriteRule(r)
+		}
+		b.Writelnf("}")
+	}
+
+	b.Shims.WriteRule = func(b *Builder, r *ast.Rule) {
+		if r == nil || r.Name == nil {
+			return
+		}
+
+		b.ExprIndex = 0
+		b.RuleName = r.Name.Val
+
+		if b.Entrypoint == "" {
+			b.Entrypoint = r.Name.Val
+		}
+
+		if b.GrammarMap {
+			b.Writelnf("%q: {", r.Name.Val)
+		} else {
+			b.Writelnf("{")
+		}
+		b.Writelnf("\tname: %q,", r.Name.Val)
+		if r.DisplayName != nil && r.DisplayName.Val != "" {
+			b.Writelnf("\tdisplayName: %q,", r.DisplayName.Val)
+		}
+		b.WriteRulePos(r.Pos())
+		b.Writef("\texpr: ")
+		b.WriteExpr(r.Expr)
+		if b.HaveLeftRecursion {
+			b.Writelnf("\tleader: %t,", r.Leader)
+			b.Writelnf("\tleftRecursive: %t,", r.LeftRecursive)
+		}
+		b.Writelnf("},")
+	}
+
+	b.Shims.WriteAndExpr = func(b *Builder, and *ast.AndExpr) {
+		if and == nil {
+			b.WriteNilLine()
+			return
+		}
+		exprName := "andExpr"
+		if and.Logical {
+			exprName = "andLogicalExpr"
+		}
+		// &andLogicalExpr{
+		b.Shims.WriteExprBlock(b, exprName, true, func() {
+			b.WriteRulePos(and.Pos())
+			b.Writef("\texpr: ")
+			b.WriteExpr(and.Expr)
+		})
+	}
+
+	b.Shims.WriteAnyMatcher = func(b *Builder, any *ast.AnyMatcher) {
+		if any == nil {
+			b.WriteNilLine()
+			return
+		}
+
+		if b.SetRulePos {
+			b.WriteExprBlock("anyMatcher", true, func() {
+				pos := any.Pos()
+				b.Writelnf("\tline: %d, col: %d, offset: %d,", pos.Line, pos.Col, pos.Off)
+			})
+		} else {
+			// b.Writelnf("&anyMatcher{},")
+			b.WriteExprBlock("anyMatcher", false, nil)
+		}
+	}
+
+	b.Shims.WriteActionExpr = func(b *Builder, act *ast.ActionExpr) {
+		if act == nil {
+			b.WriteNilLine()
+			return
+		}
+		if act.FuncIx == 0 {
+			act.FuncIx = b.ExprIndex
+		}
+		b.WriteExprBlock("actionExpr", true, func() {
+			b.WriteRulePos(act.Pos())
+			b.Writelnf("\trun: (*parser).call%s,", b.funcName(act.FuncIx))
+			b.Writef("\texpr: ")
+			b.WriteExpr(act.Expr)
+		})
+	}
+
+	b.Shims.WriteAndCodeExpr = func(b *Builder, and *ast.AndCodeExpr) {
+		if and == nil {
+			b.WriteNilLine()
+			return
+		}
+		b.WriteExprBlock("andCodeExpr", false, func() {
+			pos := and.Pos()
+			if and.FuncIx == 0 {
+				and.FuncIx = b.ExprIndex
+			}
+			b.WriteRulePos(pos)
+			b.Writef("\trun: (*parser).call%s,", b.funcName(and.FuncIx))
+		})
+	}
+
+	b.Shims.WriteCharClassMatcher = func(b *Builder, ch *ast.CharClassMatcher) {
+		if ch == nil {
+			b.WriteNilLine()
+			return
+		}
+		b.WriteExprBlock("charClassMatcher", true, func() {
+			pos := ch.Pos()
+			b.WriteRulePos(pos)
+			b.Writelnf("\tval: %q,", ch.Val)
+			if len(ch.Chars) > 0 {
+				b.Writef("\tchars:")
+				b.WriteArray("rune", false, func() {
+					for _, rn := range ch.Chars {
+						if ch.IgnoreCase {
+							b.Writef("%q,", unicode.ToLower(rn))
+						} else {
+							b.Writef("%q,", rn)
+						}
+					}
+				})
+			}
+			if len(ch.Ranges) > 0 {
+				b.Writef("\tranges:")
+				b.WriteArray("rune", false, func() {
+					for _, rn := range ch.Ranges {
+						if ch.IgnoreCase {
+							b.Writef("%q,", unicode.ToLower(rn))
+						} else {
+							b.Writef("%q,", rn)
+						}
+					}
+				})
+			}
+			if len(ch.UnicodeClasses) > 0 {
+				b.RangeTable = true
+				b.Writef("\tclasses: ")
+				b.WriteArray("*unicode.RangeTable", false, func() {
+					for _, cl := range ch.UnicodeClasses {
+						// b.Writef("RangeTable(%q),", cl)
+						b.Writef("unicode.%s,", cl)
+					}
+				})
+			}
+			if ch.IgnoreCase {
+				b.Writelnf("\tignoreCase: %t,", ch.IgnoreCase)
+			}
+			if ch.Inverted {
+				b.Writelnf("\tinverted: %t,", ch.Inverted)
+			}
+		})
+	}
+
+	b.Shims.WriteCodeExpr = func(b *Builder, state *ast.CodeExpr) {
+		if state == nil {
+			b.WriteNilLine()
+			return
+		}
+		b.WriteExprBlock("codeExpr", true, func() {
+			pos := state.Pos()
+			if state.FuncIx == 0 {
+				state.FuncIx = b.ExprIndex
+			}
+			b.WriteRulePos(pos)
+			b.Writelnf("\trun: (*parser).call%s,", b.funcName(state.FuncIx))
+			if state.NotSkip {
+				b.Writelnf("\tnotSkip: %v,", state.NotSkip)
+			}
+		})
+	}
+
+	b.Shims.WriteChoiceExpr = func(b *Builder, ch *ast.ChoiceExpr) {
+		if ch == nil {
+			b.WriteNilLine()
+			return
+		}
+		b.WriteExprBlock("choiceExpr", true, func() {
+			pos := ch.Pos()
+			b.WriteRulePos(pos)
+			if len(ch.Alternatives) > 0 {
+				b.Writelnf("\talternatives:")
+				b.WriteArray("any", true, func() {
+					for _, alt := range ch.Alternatives {
+						b.WriteExpr(alt)
+					}
+				})
+			}
+		})
+	}
+
+	b.Shims.WriteLabeledExpr = func(b *Builder, lab *ast.LabeledExpr) {
+		if lab == nil {
+			b.WriteNilLine()
+			return
+		}
+		b.WriteExprBlock("labeledExpr", true, func() {
+			pos := lab.Pos()
+			b.WriteRulePos(pos)
+			if lab.Label != nil && lab.Label.Val != "" {
+				b.Writelnf("\tlabel: %q,", lab.Label.Val)
+			}
+			b.Writef("\texpr: ")
+			b.WriteExpr(lab.Expr)
+			if lab.TextCapture {
+				b.Writelnf("\ttextCapture: %v,", lab.TextCapture)
+			}
+		})
+	}
+
+	b.Shims.WriteLitMatcher = func(b *Builder, lit *ast.LitMatcher) {
+		if lit == nil {
+			b.WriteNilLine()
+			return
+		}
+
+		writeFunc := b.Writef
+		if b.SetRulePos {
+			writeFunc = b.Writelnf
+		}
+
+		// writeFunc("&litMatcher{")
+		b.WriteExprBlock("litMatcher", b.SetRulePos, func() {
+			pos := lit.Pos()
+			b.WriteRulePos(pos)
+			if lit.IgnoreCase {
+				writeFunc("\tval: %q,", strings.ToLower(lit.Val))
+			} else {
+				writeFunc("\tval: %q,", lit.Val)
+			}
+			if lit.IgnoreCase {
+				writeFunc("\tignoreCase: %t,", lit.IgnoreCase)
+			}
+			ignoreCaseFlag := ""
+			if lit.IgnoreCase {
+				ignoreCaseFlag = "i"
+			}
+			writeFunc("\twant: %q,", strconv.Quote(lit.Val)+ignoreCaseFlag)
+		})
+	}
+
+	b.Shims.WriteNotCodeExpr = func(b *Builder, not *ast.NotCodeExpr) {
+		if not == nil {
+			b.WriteNilLine()
+			return
+		}
+		b.WriteExprBlock("notCodeExpr", false, func() {
+			pos := not.Pos()
+			if not.FuncIx == 0 {
+				not.FuncIx = b.ExprIndex
+			}
+			b.WriteRulePos(pos)
+			b.Writef("\trun: (*parser).call%s,", b.funcName(not.FuncIx))
+		})
+	}
+
+	b.Shims.WriteNotExpr = func(b *Builder, not *ast.NotExpr) {
+		if not == nil {
+			b.WriteNilLine()
+			return
+		}
+		name := "notExpr"
+		if not.Logical {
+			name = "notLogicalExpr"
+		}
+
+		b.WriteExprBlock(name, true, func() {
+			pos := not.Pos()
+			b.WriteRulePos(pos)
+			b.Writef("\texpr: ")
+			b.WriteExpr(not.Expr)
+		})
+	}
+
+	b.Shims.WriteOneOrMoreExpr = func(b *Builder, one *ast.OneOrMoreExpr) {
+		if one == nil {
+			b.WriteNilLine()
+			return
+		}
+
+		b.WriteExprBlock("oneOrMoreExpr", true, func() {
+			pos := one.Pos()
+			b.WriteRulePos(pos)
+			b.Writef("\texpr: ")
+			b.WriteExpr(one.Expr)
+		})
+	}
+
+	b.Shims.WriteRecoveryExpr = func(b *Builder, recover *ast.RecoveryExpr) {
+		if recover == nil {
+			b.WriteNilLine()
+			return
+		}
+		b.WriteExprBlock("recoveryExpr", true, func() {
+			pos := recover.Pos()
+			b.WriteRulePos(pos)
+
+			b.Writef("\texpr: ")
+			b.WriteExpr(recover.Expr)
+			b.Writef("\trecoverExpr: ")
+			b.WriteExpr(recover.RecoverExpr)
+
+			b.Writelnf("\tfailureLabel: ")
+			// []string{ ... }
+			b.WriteArray("string", true, func() {
+				for _, label := range recover.Labels {
+					b.Writelnf("%q,", label)
+				}
+			})
+		})
+	}
+
+	b.Shims.WriteRuleRefExpr = func(b *Builder, ref *ast.RuleRefExpr) {
+		if ref == nil {
+			b.WriteNilLine()
+			return
+		}
+		if b.IRefEnable {
+			name := "ruleIRefExpr"
+			if b.IRefCodeEnable {
+				name = "ruleIRefExprX"
+			}
+			b.WriteExprBlock(name, false, func() {
+				pos := ref.Pos()
+				b.WriteRulePos(pos)
+				if ref.Name != nil && ref.Name.Val != "" {
+					info := b.RuleName2Index[ref.Name.Val]
+					b.Writef("\tindex: %d /* %s */", info.Index, ref.Name.Val)
+
+					if b.IRefCodeEnable {
+						exprType := info.ExprType
+						if exprType == "ruleRefExpr" {
+							exprType = "ruleIRefExprX"
+						}
+						parseFnName := "parse" + strings.ToUpper(exprType[:1]) + exprType[1:]
+						b.Writef(", call: func(p*parser, expr any) (any, bool) { return p.%s(expr.(*rule).expr.(*%s)) }", parseFnName, exprType)
+					}
+				}
+			})
+		} else {
+			b.WriteExprBlock("ruleRefExpr", false, func() {
+				pos := ref.Pos()
+				b.WriteRulePos(pos)
+				if ref.Name != nil && ref.Name.Val != "" {
+					b.Writef("\tname: %q,", ref.Name.Val)
+				}
+			})
+		}
+	}
+
+	b.Shims.WriteSeqExpr = func(b *Builder, seq *ast.SeqExpr) {
+		if seq == nil {
+			b.WriteNilLine()
+			return
+		}
+		b.WriteExprBlock("seqExpr", true, func() {
+			b.WriteRulePos(seq.Pos())
+			if len(seq.Exprs) > 0 {
+				b.Writef("\texprs: ")
+				b.WriteArray("any", true, func() {
+					for _, e := range seq.Exprs {
+						b.WriteExpr(e)
+					}
+				})
+			}
+		})
+	}
+
+	b.Shims.WriteThrowExpr = func(b *Builder, throw *ast.ThrowExpr) {
+		if throw == nil {
+			b.WriteNilLine()
+			return
+		}
+		b.WriteExprBlock("throwExpr", true, func() {
+			pos := throw.Pos()
+			b.WriteRulePos(pos)
+			b.Writelnf("\tlabel: %q,", throw.Label)
+		})
+	}
+
+	b.Shims.WriteZeroOrMoreExpr = func(b *Builder, zero *ast.ZeroOrMoreExpr) {
+		if zero == nil {
+			b.WriteNilLine()
+			return
+		}
+		b.WriteExprBlock("zeroOrMoreExpr", true, func() {
+			pos := zero.Pos()
+			b.WriteRulePos(pos)
+			b.Writef("\texpr: ")
+			b.WriteExpr(zero.Expr)
+		})
+	}
+
+	b.Shims.WriteZeroOrOneExpr = func(b *Builder, zero *ast.ZeroOrOneExpr) {
+		if zero == nil {
+			b.WriteNilLine()
+			return
+		}
+
+		b.WriteExprBlock("zeroOrOneExpr", true, func() {
+			pos := zero.Pos()
+			b.WriteRulePos(pos)
+			b.Writef("\texpr: ")
+			b.WriteExpr(zero.Expr)
+		})
+	}
+
+	b.Shims.WriteFunc = func(b *Builder, funcIx int, code *ast.CodeBlock, funcTpl string) {
+		if code == nil {
+			return
+		}
+		val := b.TemplateRender(strings.TrimSpace(code.Val)[1:len(code.Val)-1], true)
+		if len(val) > 0 && val[0] == '\n' {
+			val = val[1:]
+		}
+		if len(val) > 0 && val[len(val)-1] == '\n' {
+			val = val[:len(val)-1]
+		}
+		var args bytes.Buffer
+		ix := len(b.ArgsStack) - 1
+		argsInfo := stringArrayUniq(b.ArgsStack[ix])
+		if ix >= 0 {
+			for i, arg := range argsInfo {
+				if i > 0 {
+					args.WriteString(", ")
+				}
+				args.WriteString(arg)
+			}
+		}
+		if args.Len() > 0 {
+			args.WriteString(" any")
+		}
+
+		params := args.String()
+		args.Reset()
+		if ix >= 0 {
+			for i, arg := range argsInfo {
+				if i > 0 {
+					args.WriteString(", ")
+				}
+				args.WriteString(fmt.Sprintf(`stack[%q]`, arg))
+			}
+		}
+
+		b.Writelnf(b.TemplateRenderBase(funcTpl, false, map[string]any{
+			"funcName":   b.funcName(funcIx),
+			"paramsDef":  params,
+			"code":       val,
+			"paramsCall": args.String(),
+			"useStack":   len(argsInfo) > 0,
+		}))
+	}
+
+	b.Shims.WriteRulePos = func(b *Builder, pos ast.Pos) {
+		if b.SetRulePos {
+			b.Writelnf("\tpos: position{line: %d, col: %d, offset: %d},", pos.Line, pos.Col, pos.Off)
+		}
+	}
+
+	b.Shims.WriteNilLine = func(b *Builder) {
+		b.Writelnf("nil,")
+	}
+
+	b.Shims.WriteStaticCodeWrap = func(b *Builder) {
+		b.WriteStaticCode(staticCode)
+	}
+
+	b.Shims.FuncName = func(b *Builder, ix int) string {
+		return "_on" + b.FuncPrefix + b.RuleName + "_" + strconv.Itoa(ix)
+	}
+
+	b.Shims.WriteExprBlock = func(b *Builder, name string, newline bool, inside func()) {
+		// &zeroOrMoreExpr{ ... }
+		b.Writef("&%s{", name)
+		if newline {
+			b.Writeln("")
+		}
+		if inside != nil {
+			inside()
+		}
+		b.Writef("},\n")
+	}
+
+	b.Shims.WriteArray = func(b *Builder, typeName string, newline bool, inside func()) {
+		// Example: []any{},
+		b.Writef("[]%s{", typeName)
+		if newline {
+			b.Writeln("")
+		}
+		if inside != nil {
+			inside()
+		}
+		b.Writeln("},")
+	}
 }
