@@ -49,14 +49,14 @@ func (b *Builder) TemplateRender(text string, trim bool) string {
 
 // generated function templates
 var (
-	callCodeFuncTemplate = `func (p *parser) call{{.funcName}}() any {
+	callCodeFuncTemplate = `func (p *parser) call{{.FuncName}}() any {
 {{ if .useStack }} stack := p.vstack[len(p.vstack)-1]; {{ end }} return (func (c *current, {{.paramsDef}}) any {
 		{{.code}}
 		return nil
 	})(&p.cur, {{.paramsCall}})
 }
 `
-	callPredFuncTemplate = `func (p *parser) call{{.funcName}}() bool {
+	callPredFuncTemplate = `func (p *parser) call{{.FuncName}}() bool {
 {{ if .useStack }} stack := p.vstack[len(p.vstack)-1]; {{ end }}	return (func (c *current, {{.paramsDef}}) bool {
 		{{.code}}
 	})(&p.cur, {{.paramsCall}})
@@ -137,7 +137,6 @@ func Nolint(nolint bool) Option {
 // written to the specified W.
 func BuildParser(w io.Writer, g *ast.Grammar, opts ...Option) error {
 	b := &Builder{W: w, RecvName: "c", Target: "go"}
-	b.GetExprInfo = GetExprInfo
 	b.Init()
 	b.SetOptions(opts)
 	return b.BuildParser(g)
@@ -174,6 +173,9 @@ type Builder struct {
 
 	Shims       OverrideShims
 	GetExprInfo func(expr ast.Expression) *ExprInfo
+
+	CallCodeFuncTemplate string
+	CallPredFuncTemplate string
 }
 
 func GetExprInfo(expr ast.Expression) *ExprInfo {
@@ -225,7 +227,30 @@ func (b *Builder) SetOptions(opts []Option) {
 	}
 }
 
+type RuleLabelCheck struct {
+	IsLabelExists bool
+}
+
+func (r *RuleLabelCheck) Visit(expr ast.Expression) ast.Visitor {
+	if _, ok := expr.(*ast.RuleRefExpr); ok {
+		return nil
+	}
+
+	if _, ok := expr.(*ast.LabeledExpr); ok {
+		r.IsLabelExists = true
+		return nil
+	}
+
+	return r
+}
+
 func (b *Builder) BuildParser(grammar *ast.Grammar) error {
+	for index, rule := range grammar.Rules {
+		r := &RuleLabelCheck{}
+		ast.Walk(r, rule.Expr)
+		grammar.Rules[index].IsLabelExists = r.IsLabelExists
+	}
+
 	haveLeftRecursion, err := PrepareGrammar(grammar)
 	if err != nil {
 		return fmt.Errorf("incorrect grammar: %W", err)
@@ -488,7 +513,7 @@ func (b *Builder) writeActionExprCode(act *ast.ActionExpr) {
 		return
 	}
 	if act.FuncIx > 0 {
-		b.writeFunc(act.FuncIx, act.Code, callCodeFuncTemplate)
+		b.writeFunc(act.FuncIx, act.Code, b.CallCodeFuncTemplate)
 		act.FuncIx = 0 // already rendered, prevent duplicates
 	}
 }
@@ -498,7 +523,7 @@ func (b *Builder) writeAndCodeExprCode(and *ast.AndCodeExpr) {
 		return
 	}
 	if and.FuncIx > 0 {
-		b.writeFunc(and.FuncIx, and.Code, callPredFuncTemplate)
+		b.writeFunc(and.FuncIx, and.Code, b.CallPredFuncTemplate)
 		and.FuncIx = 0 // already rendered, prevent duplicates
 	}
 }
@@ -508,7 +533,7 @@ func (b *Builder) writeNotCodeExprCode(not *ast.NotCodeExpr) {
 		return
 	}
 	if not.FuncIx > 0 {
-		b.writeFunc(not.FuncIx, not.Code, callPredFuncTemplate)
+		b.writeFunc(not.FuncIx, not.Code, b.CallPredFuncTemplate)
 		not.FuncIx = 0 // already rendered, prevent duplicates
 	}
 }
@@ -518,12 +543,12 @@ func (b *Builder) writeCodeExprCode(code *ast.CodeExpr) {
 		return
 	}
 	if code.FuncIx > 0 {
-		b.writeFunc(code.FuncIx, code.Code, callCodeFuncTemplate)
+		b.writeFunc(code.FuncIx, code.Code, b.CallCodeFuncTemplate)
 		code.FuncIx = 0 // already rendered, prevent duplicates
 	}
 }
 
-func stringArrayUniq(items []string) []string {
+func StringArrayUniq(items []string) []string {
 	var newArray []string
 	m := map[string]bool{}
 	for _, i := range items {
@@ -601,7 +626,7 @@ func (b *Builder) WriteStaticCode(code string) {
 	// }
 }
 
-func (b *Builder) funcName(ix int) string {
+func (b *Builder) FuncName(ix int) string {
 	return b.Shims.FuncName(b, ix)
 }
 
@@ -669,6 +694,10 @@ type OverrideShims struct {
 }
 
 func (b *Builder) Init() {
+	b.GetExprInfo = GetExprInfo
+	b.CallCodeFuncTemplate = callCodeFuncTemplate
+	b.CallPredFuncTemplate = callPredFuncTemplate
+
 	b.Shims.WriteInit = func(b *Builder, init *ast.CodeBlock) {
 		if init == nil {
 			return
@@ -732,6 +761,9 @@ func (b *Builder) Init() {
 		if r.DisplayName != nil && r.DisplayName.Val != "" {
 			b.Writelnf("\tdisplayName: %q,", r.DisplayName.Val)
 		}
+		if r.IsLabelExists {
+			b.Writelnf("\tvarExists: %t,", r.IsLabelExists)
+		}
 		b.WriteRulePos(r.Pos())
 		b.Writef("\texpr: ")
 		b.WriteExpr(r.Expr)
@@ -786,7 +818,7 @@ func (b *Builder) Init() {
 		}
 		b.WriteExprBlock("actionExpr", true, func() {
 			b.WriteRulePos(act.Pos())
-			b.Writelnf("\trun: (*parser).call%s,", b.funcName(act.FuncIx))
+			b.Writelnf("\trun: (*parser).call%s,", b.FuncName(act.FuncIx))
 			b.Writef("\texpr: ")
 			b.WriteExpr(act.Expr)
 		})
@@ -803,7 +835,7 @@ func (b *Builder) Init() {
 				and.FuncIx = b.ExprIndex
 			}
 			b.WriteRulePos(pos)
-			b.Writef("\trun: (*parser).call%s,", b.funcName(and.FuncIx))
+			b.Writef("\trun: (*parser).call%s,", b.FuncName(and.FuncIx))
 		})
 	}
 
@@ -870,7 +902,7 @@ func (b *Builder) Init() {
 				state.FuncIx = b.ExprIndex
 			}
 			b.WriteRulePos(pos)
-			b.Writelnf("\trun: (*parser).call%s,", b.funcName(state.FuncIx))
+			b.Writelnf("\trun: (*parser).call%s,", b.FuncName(state.FuncIx))
 			if state.NotSkip {
 				b.Writelnf("\tnotSkip: %v,", state.NotSkip)
 			}
@@ -957,7 +989,7 @@ func (b *Builder) Init() {
 				not.FuncIx = b.ExprIndex
 			}
 			b.WriteRulePos(pos)
-			b.Writef("\trun: (*parser).call%s,", b.funcName(not.FuncIx))
+			b.Writef("\trun: (*parser).call%s,", b.FuncName(not.FuncIx))
 		})
 	}
 
@@ -1125,7 +1157,7 @@ func (b *Builder) Init() {
 		}
 		var args bytes.Buffer
 		ix := len(b.ArgsStack) - 1
-		argsInfo := stringArrayUniq(b.ArgsStack[ix])
+		argsInfo := StringArrayUniq(b.ArgsStack[ix])
 		if ix >= 0 {
 			for i, arg := range argsInfo {
 				if i > 0 {
@@ -1150,7 +1182,7 @@ func (b *Builder) Init() {
 		}
 
 		b.Writelnf(b.TemplateRenderBase(funcTpl, false, map[string]any{
-			"funcName":   b.funcName(funcIx),
+			"FuncName":   b.FuncName(funcIx),
 			"paramsDef":  params,
 			"code":       val,
 			"paramsCall": args.String(),

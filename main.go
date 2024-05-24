@@ -14,7 +14,8 @@ import (
 	"golang.org/x/tools/imports"
 
 	"github.com/fy0/pigeon/ast"
-	"github.com/fy0/pigeon/builder"
+	builderGo "github.com/fy0/pigeon/builder"
+	// builderHx "github.com/fy0/pigeon/builder_hx"
 )
 
 // exit function mockable for tests
@@ -55,8 +56,9 @@ func main() {
 		runFuncPrefixFlag      = fs.String("run-func-prefix", "", "set prefix for generated function name: `(*parser).call_onXXX`. For multiple peg files")
 		grammarOnlyFlag        = fs.Bool("grammar-only", false, "use it when you have multiple peg files")
 		optimizeRefExprByIndex = fs.Bool("optimize-ref-expr-by-index", false, "generate optimized parser grammar find RefExpr by index (~10% increased)")
+		targetFlag             = fs.String("t", "go", "build target, default go")
 
-		//optimizeGrammar        = fs.Bool("optimize-grammar", false, "optimize the given grammar (EXPERIMENTAL FEATURE)")
+		// optimizeGrammar        = fs.Bool("optimize-grammar", false, "optimize the given grammar (EXPERIMENTAL FEATURE)")
 
 		altEntrypointsFlag ruleNamesFlag
 	)
@@ -122,9 +124,9 @@ func main() {
 	}
 
 	if !*noBuildFlag {
-		//if *optimizeGrammar {
+		// if *optimizeGrammar {
 		// ast.Optimize(grammar, altEntrypointsFlag...)
-		//}
+		// }
 
 		// generate parser
 		out := output(*outputFlag)
@@ -138,21 +140,33 @@ func main() {
 
 		outBuf := bytes.NewBuffer([]byte{})
 
-		curNmOpt := builder.ReceiverName(*recvrNmFlag)
-		optimizeParser := builder.Optimize(*optimizeParserFlag)
-		nolintOpt := builder.Nolint(*nolint)
-		refExprByIndex := builder.OptimizeRefExprByIndex(*optimizeRefExprByIndex)
-		runFuncPrefix := builder.RunFuncPrefix(*runFuncPrefixFlag)
-		grammarOnly := builder.GrammarOnly(*grammarOnlyFlag)
-		grammarName := builder.GrammarName(*grammarNameFlag)
+		curNmOpt := builderGo.ReceiverName(*recvrNmFlag)
+		optimizeParser := builderGo.Optimize(*optimizeParserFlag)
+		nolintOpt := builderGo.Nolint(*nolint)
+		refExprByIndex := builderGo.OptimizeRefExprByIndex(*optimizeRefExprByIndex)
+		runFuncPrefix := builderGo.RunFuncPrefix(*runFuncPrefixFlag)
+		grammarOnly := builderGo.GrammarOnly(*grammarOnlyFlag)
+		grammarName := builderGo.GrammarName(*grammarNameFlag)
 
-		if err := builder.BuildParser(
-			outBuf, grammar, curNmOpt, optimizeParser,
-			runFuncPrefix, grammarOnly, grammarName,
-			nolintOpt, refExprByIndex); err != nil {
-			fmt.Fprintln(os.Stderr, "build error: ", err)
-			exit(5)
+		if *targetFlag == "go" {
+			if err := builderGo.BuildParser(
+				outBuf, grammar, curNmOpt, optimizeParser,
+				runFuncPrefix, grammarOnly, grammarName,
+				nolintOpt, refExprByIndex); err != nil {
+				fmt.Fprintln(os.Stderr, "build error: ", err)
+				exit(5)
+			}
 		}
+
+		// if *targetFlag == "hx" {
+		// 	if err := builderHx.BuildParser(
+		// 		outBuf, grammar, curNmOpt, optimizeParser,
+		// 		runFuncPrefix, grammarOnly, grammarName,
+		// 		nolintOpt, refExprByIndex); err != nil {
+		// 		fmt.Fprintln(os.Stderr, "build error: ", err)
+		// 		exit(5)
+		// 	}
+		// }
 
 		// Defaults from golang.org/x/tools/cmd/goimports
 		options := &imports.Options{
@@ -162,19 +176,26 @@ func main() {
 			Fragment:  true,
 		}
 
-		formattedBuf, err := imports.Process("filename", outBuf.Bytes(), options)
-		if err != nil {
+		if *targetFlag == "go" {
+			formattedBuf, err := imports.Process("filename", outBuf.Bytes(), options)
+			if err != nil {
+				if _, err := out.Write(outBuf.Bytes()); err != nil {
+					fmt.Fprintln(os.Stderr, "write error: ", err)
+					exit(7)
+				}
+				fmt.Fprintln(os.Stderr, "format error: ", err)
+				exit(6)
+			}
+
+			if _, err := out.Write(formattedBuf); err != nil {
+				fmt.Fprintln(os.Stderr, "write error: ", err)
+				exit(7)
+			}
+		} else {
 			if _, err := out.Write(outBuf.Bytes()); err != nil {
 				fmt.Fprintln(os.Stderr, "write error: ", err)
 				exit(7)
 			}
-			fmt.Fprintln(os.Stderr, "format error: ", err)
-			exit(6)
-		}
-
-		if _, err := out.Write(formattedBuf); err != nil {
-			fmt.Fprintln(os.Stderr, "write error: ", err)
-			exit(7)
 		}
 	}
 }
@@ -225,6 +246,8 @@ the generated code is written to this file instead.
 		to set variable name of grammar, default is g, "var g = &grammar{ ... }"
 	-run-func-prefix
 		set prefix for generated function name: "(*parser).call_onXXX". For multiple peg files
+	-target
+		build target, default go
 
 See https://godoc.org/github.com/mna/pigeon for more information.
 This version is a fork: https://github.com/fy0/pigeon

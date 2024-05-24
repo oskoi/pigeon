@@ -231,8 +231,8 @@ The [BSD 3-Clause license][4]. See the LICENSE file.
 
 
 ## TODO
-* performance: Create another version of `parseOneOrMoreExpr/parseZeroOrMoreExpr` which not collect results. Choose expr decide by is labeled, A bit faster.
-* performance: Remove `pushV` and `popV`, a bit faster.
-* performance: In `parseCharClassMatcher`, variable `start` can be removed in most case. Lot of of small memory pieces allocated.
-* performance: Remove Wrap function if they are not needed.
+* ~~performance: Create another version of `parseOneOrMoreExpr/parseZeroOrMoreExpr` which not collect results. Choose expr decide by is labeled, A bit faster.~~
+* ~~performance: Remove `pushV` and `popV`, a bit faster.~~
+* ~~performance: In `parseCharClassMatcher`, variable `start` can be removed in most case. Lot of of small memory pieces allocated.~~
+* ~~performance: Remove Wrap function if they are not needed.~~
 * performance: Too many any, can we remove `parseExpr`?

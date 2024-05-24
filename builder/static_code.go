@@ -181,6 +181,7 @@ type rule struct {
 	name        string
 	displayName string
 	expr        any
+	varExists   bool
 }
 
 // {{ if .Nolint }} nolint: structcheck {{else}} ==template== {{ end }}
@@ -397,55 +398,6 @@ func (p *parserError) Error() string {
 	return p.prefix + ": " + p.Inner.Error()
 }
 
-// newParser creates a parser with the specified input source and options.
-func newParser(filename string, b []byte, opts ...option) *parser {
-	stats := Stats{
-		ChoiceAltCnt: make(map[string]map[string]int),
-	}
-
-	p := &parser{
-		filename: filename,
-		errs:     new(errList),
-		data:     b,
-		pt:       savepoint{position: position{line: 1}},
-		recover:  true,
-		cur: current{
-			data: &ParserCustomData{},
-		},
-		maxFailPos:      position{col: 1, line: 1},
-		maxFailExpected: make([]string, 0, 20),
-		Stats:           &stats,
-		// start rule is rule [0] unless an alternate entrypoint is specified
-		entrypoint: "{{ .Entrypoint }}",
-		scStack: []bool{false},
-	}
-
-	p.spStack.init(5)
-	p.setOptions(opts)
-
-	if p.maxExprCnt == 0 {
-		p.maxExprCnt = math.MaxUint64
-	}
-
-	return p
-}
-
-// setOptions applies the options to the parser.
-func (p *parser) setOptions(opts []option) {
-	for _, opt := range opts {
-		opt(p)
-	}
-}
-
-// setCustomData to the parser.
-func (p *parser) setCustomData(data *ParserCustomData) {
-	p.cur.data = data;
-}
-
-func (p *parser) checkSkipCode() bool {
-	return p.scStack[len(p.scStack)-1]
-}
-
 // {{ if .Nolint }} nolint: structcheck,deadcode {{else}} ==template== {{ end }}
 type resultTuple struct {
 	v   any
@@ -531,6 +483,55 @@ type parser struct {
 	scStack []bool
 	// save point stack
 	spStack parserStack
+}
+
+// newParser creates a parser with the specified input source and options.
+func newParser(filename string, b []byte, opts ...option) *parser {
+	stats := Stats{
+		ChoiceAltCnt: make(map[string]map[string]int),
+	}
+
+	p := &parser{
+		filename: filename,
+		errs:     new(errList),
+		data:     b,
+		pt:       savepoint{position: position{line: 1}},
+		recover:  true,
+		cur: current{
+			data: &ParserCustomData{},
+		},
+		maxFailPos:      position{col: 1, line: 1},
+		maxFailExpected: make([]string, 0, 20),
+		Stats:           &stats,
+		// start rule is rule [0] unless an alternate entrypoint is specified
+		entrypoint: "{{ .Entrypoint }}",
+		scStack: []bool{false},
+	}
+
+	p.spStack.init(5)
+	p.setOptions(opts)
+
+	if p.maxExprCnt == 0 {
+		p.maxExprCnt = math.MaxUint64
+	}
+
+	return p
+}
+
+// setOptions applies the options to the parser.
+func (p *parser) setOptions(opts []option) {
+	for _, opt := range opts {
+		opt(p)
+	}
+}
+
+// setCustomData to the parser.
+func (p *parser) setCustomData(data *ParserCustomData) {
+	p.cur.data = data;
+}
+
+func (p *parser) checkSkipCode() bool {
+	return p.scStack[len(p.scStack)-1]
 }
 
 // push a variable set on the vstack.
@@ -959,12 +960,19 @@ func (p *parser) parseRule(rule *rule) (any, bool) {
 }
 // {{ else }}
 func (p *parser) parseRuleWrap(rule *rule) (any, bool) {
-	p.rstack = append(p.rstack, rule)
-	p.pushV()
-	val, ok := p.parseExprWrap(rule.expr)
-	p.popV()
-	p.rstack = p.rstack[:len(p.rstack)-1]
-	return val, ok
+	if rule.varExists && !p.checkSkipCode() {
+		p.rstack = append(p.rstack, rule)
+		p.pushV()
+		val, ok := p.parseExprWrap(rule.expr)
+		p.popV()
+		p.rstack = p.rstack[:len(p.rstack)-1]
+		return val, ok
+	} else {
+		p.rstack = append(p.rstack, rule)
+		val, ok = p.parseExprWrap(rule.expr)
+		p.rstack = p.rstack[:len(p.rstack)-1]
+		return val, ok
+	}
 }
 // {{ end }} ==template==
 
@@ -1009,9 +1017,9 @@ func (p *parser) {{ .ParseExprName }}(expr any) (any, bool) {
 	case *andCodeExpr:
 		val, ok = p.parseAndCodeExpr(expr)
 	case *andExpr:
-		val, ok = p.parseAndExpr(expr, false)
+		val, ok = p.parseAndExpr(expr)
 	case *andLogicalExpr:
-		val, ok = p.parseAndExpr((*andExpr)(expr), true)
+		val, ok = p.parseAndLogicalExpr(expr)
 	case *anyMatcher:
 		val, ok = p.parseAnyMatcher(expr)
 	case *charClassMatcher:
@@ -1027,9 +1035,9 @@ func (p *parser) {{ .ParseExprName }}(expr any) (any, bool) {
 	case *notCodeExpr:
 		val, ok = p.parseNotCodeExpr(expr)
 	case *notExpr:
-		val, ok = p.parseNotExpr(expr, false)
+		val, ok = p.parseNotExpr(expr)
 	case *notLogicalExpr:
-		val, ok = p.parseNotExpr((*notExpr)(expr), true)
+		val, ok = p.parseNotLogicalExpr(expr)
 	case *oneOrMoreExpr:
 		val, ok = p.parseOneOrMoreExpr(expr)
 	case *recoveryExpr:
@@ -1080,7 +1088,6 @@ func (p *parser) parseActionExpr(act *actionExpr) (any, bool) {
 		p._errPos = &start.position
 		actVal := act.run(p)
 		p._errPos = nil
-
 		val = actVal
 	}
 	// ==template== {{ if not .Optimize }}
@@ -1102,7 +1109,15 @@ func (p *parser) parseAndCodeExpr(and *andCodeExpr) (any, bool) {
 	return nil, ok
 }
 
-func (p *parser) parseAndExpr(and *andExpr, logical bool) (any, bool) {
+func (p *parser) parseAndExpr(and *andExpr) (any, bool) {
+	return p.parseAndExprBase(and, false)
+}
+
+func (p *parser) parseAndLogicalExpr(and *andLogicalExpr) (any, bool) {
+	return p.parseAndExprBase((*andExpr)(and), true)
+}
+
+func (p *parser) parseAndExprBase(and *andExpr, logical bool) (any, bool) {
 	// ==template== {{ if not .Optimize }}
 	if p.debug {
 		defer p.out(p.in("parseAndExpr"))
@@ -1110,14 +1125,12 @@ func (p *parser) parseAndExpr(and *andExpr, logical bool) (any, bool) {
 
 	// {{ end }} ==template==
 	pt := p.pt
-	p.pushV()
 
 	p.scStack = append(p.scStack, true)
 	_, ok := p.parseExprWrap(and.expr)
 	p.scStack = p.scStack[:len(p.scStack)-1]
 
 	matchedOffset := p.pt.offset
-	p.popV()
 	p.restore(&pt)
 
 	if logical {
@@ -1232,18 +1245,11 @@ func (p *parser) incChoiceAltCnt(ch *choiceExpr, altI int) {
 // {{ end }} ==template==
 
 func (p *parser) parseChoiceExpr(ch *choiceExpr) (any, bool) {
-	// ==template== {{ if not .Optimize }}
-	if p.debug {
-		defer p.out(p.in("parseChoiceExpr"))
-	}
-	// {{ end }} ==template==
 	for altI, alt := range ch.alternatives {
 		// dummy assignment to prevent compile error if optimized
 		_ = altI
 
-		p.pushV()
 		val, ok := p.parseExprWrap(alt)
-		p.popV()
 		if ok {
 			// ==template== {{ if not .Optimize }}
 			p.incChoiceAltCnt(ch, altI)
@@ -1267,10 +1273,8 @@ func (p *parser) parseLabeledExpr(lab *labeledExpr) (any, bool) {
 	startOffset := p.pt.position.offset
 	var val any
 	var ok bool
-	p.pushV()
 	val, ok = p.parseExprWrap(lab.expr)
-	p.popV()
-	if ok && lab.label != "" {
+	if ok && lab.label != "" && !p.checkSkipCode() {
 		m := p.vstack[len(p.vstack)-1]
 		if lab.textCapture {
 			m[lab.label] = string(p.sliceFromOffset(startOffset))
@@ -1329,7 +1333,15 @@ func (p *parser) parseNotCodeExpr(not *notCodeExpr) (any, bool) {
 	return nil, !ok
 }
 
-func (p *parser) parseNotExpr(not *notExpr, logical bool) (any, bool) {
+func (p *parser) parseNotExpr(not *notExpr) (any, bool) {
+	return p.parseNotExprBase(not, false)
+}
+
+func (p *parser) parseNotLogicalExpr(not *notLogicalExpr) (any, bool) {
+	return p.parseNotExprBase((*notExpr)(not), true)
+}
+
+func (p *parser) parseNotExprBase(not *notExpr, logical bool) (any, bool) {
 	// ==template== {{ if not .Optimize }}
 	if p.debug {
 		defer p.out(p.in("parseNotExpr"))
@@ -1337,7 +1349,6 @@ func (p *parser) parseNotExpr(not *notExpr, logical bool) (any, bool) {
 
 	// {{ end }} ==template==
 	pt := p.pt
-	p.pushV()
 	p.maxFailInvertExpected = !p.maxFailInvertExpected
 
 	p.scStack = append(p.scStack, true)
@@ -1345,12 +1356,11 @@ func (p *parser) parseNotExpr(not *notExpr, logical bool) (any, bool) {
 	p.scStack = p.scStack[:len(p.scStack)-1]
 
 	p.maxFailInvertExpected = !p.maxFailInvertExpected
-	p.popV()
 	matchedOffset := p.pt.offset
 	p.restore(&pt)
 
 	if logical {
-		return nil, ok && p.pt.offset != matchedOffset
+		return nil, !ok && p.pt.offset != matchedOffset
 	}
 	return nil, !ok
 }
@@ -1365,9 +1375,7 @@ func (p *parser) parseOneOrMoreExpr(expr *oneOrMoreExpr) (any, bool) {
 	var vals []any
 	var matched bool
 	for {
-		p.pushV()
 		val, ok := p.parseExprWrap(expr.expr)
-		p.popV()
 		if !ok {
 			if len(vals) > 0 {
 				return vals, matched
@@ -1475,9 +1483,7 @@ func (p *parser) parseZeroOrMoreExpr(expr *zeroOrMoreExpr) (any, bool) {
 	// {{ end }} ==template==
 	var vals []any
 	for {
-		p.pushV()
 		val, ok := p.parseExprWrap(expr.expr)
-		p.popV()
 		if !ok {
 			if len(vals) > 0 {
 				return vals, true
@@ -1497,9 +1503,7 @@ func (p *parser) parseZeroOrOneExpr(expr *zeroOrOneExpr) (any, bool) {
 	}
 
 	// {{ end }} ==template==
-	p.pushV()
 	val, _ := p.parseExprWrap(expr.expr)
-	p.popV()
 	// whether it matched or not, consider it a match
 	return val, true
 }

@@ -81,6 +81,8 @@ type Rule struct {
 	DisplayName *StringLit
 	Expr        Expression
 
+	IsLabelExists bool
+
 	// Fields below to work with left recursion.
 	Visited       bool
 	Nullable      bool
