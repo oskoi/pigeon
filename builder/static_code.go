@@ -430,11 +430,6 @@ type parser struct {
 	debug bool
 	// {{ end }} ==template==
 
-	// memoization table for the packrat algorithm:
-	// map[offset in source] map[expression or rule] {value, match}
-	memo1 map[int]map[any]*resultTuple
-	memo2 map[int]map[any]*resultTuple
-
 	// rules table, maps the rule identifier to the rule node
 	rules map[string]*rule
 	rulesArray []*rule
@@ -479,15 +474,13 @@ func newParser(filename string, b []byte, opts ...option) *parser {
 		errs:     new(errList),
 		data:     b,
 		pt:       savepoint{position: position{line: 1}},
-		recover:  false,
+		recover:  true,
 		cur: current{
 			data: &ParserCustomData{},
 		},
 		maxFailPos:      position{col: 1, line: 1},
 		maxFailExpected: make([]string, 0, 20),
 		Stats:           &stats,
-		memo1: map[int]map[any]*resultTuple{},
-		memo2: map[int]map[any]*resultTuple{},
 		// start rule is rule [0] unless an alternate entrypoint is specified
 		entrypoint: "{{ .Entrypoint }}",
 		scStack: []bool{false},
@@ -922,34 +915,6 @@ func (p *parser) {{ .ParseExprName }}(expr any) (any, bool) {
 		panic(errMaxExprCnt)
 	}
 
-	skipCode := p.checkSkipCode()
-	memo := p.memo1
-	if skipCode {
-		memo = p.memo2
-	}
-
-	setMemoized := func(pos int, expr any, val resultTuple) {
-		if memo[pos] == nil {
-			memo[pos] = map[any]*resultTuple{}
-		}
-		memo[pos][expr] = &val
-	}
-
-	getMemoized := func(expr any) *resultTuple {
-		pos := p.pt.offset
-		if memo[pos] == nil {
-			return nil
-		}
-		return memo[pos][expr]
-	}
-
-	if m := getMemoized(expr); m != nil {
-		p.restore(&m.end)
-		return m.v, m.b
-	}
-
-	pos := p.pt.offset
-
 	var val any
 	var ok bool
 	switch expr := expr.(type) {
@@ -1005,7 +970,6 @@ func (p *parser) {{ .ParseExprName }}(expr any) (any, bool) {
 		panic(fmt.Sprintf("unknown expression type %T", expr))
 	}
 
-	setMemoized(pos, expr, resultTuple{val, ok, p.pt})
 	return val, ok
 }
 
