@@ -13,9 +13,9 @@ import (
 
 	"golang.org/x/tools/imports"
 
-	"github.com/fy0/pigeon/ast"
-	builderGo "github.com/fy0/pigeon/builder"
-	// builderHx "github.com/fy0/pigeon/builder_hx"
+	"github.com/oskoi/pigeon/ast"
+	builderGo "github.com/oskoi/pigeon/builder"
+	// builderHx "github.com/oskoi/pigeon/builder_hx"
 )
 
 // exit function mockable for tests
@@ -250,7 +250,7 @@ the generated code is written to this file instead.
 		build target, default go
 
 See https://godoc.org/github.com/mna/pigeon for more information.
-This version is a fork: https://github.com/fy0/pigeon
+This version is a fork: https://github.com/oskoi/pigeon
 `
 
 // usage prints the help page of the command-line tool.

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/fy0/pigeon/ast"
+	"github.com/oskoi/pigeon/ast"
 )
 
 var (

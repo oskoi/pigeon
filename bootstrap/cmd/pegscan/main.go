@@ -8,7 +8,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/fy0/pigeon/bootstrap"
+	"github.com/oskoi/pigeon/bootstrap"
 )
 
 func main() {

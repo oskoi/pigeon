@@ -1,6 +1,6 @@
 /*
 Command pigeon generates parsers in Go from a PEG grammar.
-This version is a fork: https://github.com/fy0/pigeon
+This version is a fork: https://github.com/oskoi/pigeon
 
 From Wikipedia [0]:
 

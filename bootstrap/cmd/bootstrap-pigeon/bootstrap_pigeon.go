@@ -16,7 +16,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/fy0/pigeon/ast"
+	"github.com/oskoi/pigeon/ast"
 )
 
 var g = &grammar{

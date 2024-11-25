@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/fy0/pigeon/ast"
+	"github.com/oskoi/pigeon/ast"
 )
 
 func compareGrammars(t *testing.T, src string, exp, got *ast.Grammar) bool {
