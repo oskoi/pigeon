@@ -1326,8 +1326,7 @@ func (p *parser) parseSeqExpr(seq *seqExpr) (any, bool) {
 	}
 
 	// {{ end }} ==template==
-	var vals []any
-	notSkipCode := p.checkSkipCode()
+	vals := make([]any, 0, len(seq.exprs))
 
 	pt := p.pt
 	for _, expr := range seq.exprs {
@@ -1336,9 +1335,8 @@ func (p *parser) parseSeqExpr(seq *seqExpr) (any, bool) {
 			p.restore(&pt)
 			return nil, false
 		}
-		if notSkipCode && val != nil {
-			vals = append(vals, val)
-		}
+
+		vals = append(vals, val)
 	}
 	if len(vals) > 0 {
 		return vals, true
