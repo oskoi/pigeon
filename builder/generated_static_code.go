@@ -1326,7 +1326,7 @@ func (p *parser) parseSeqExpr(seq *seqExpr) (any, bool) {
 	}
 
 	// {{ end }} ==template==
-	vals := make([]any, 0, len(seq.exprs))
+	var vals []any
 
 	pt := p.pt
 	for _, expr := range seq.exprs {
@@ -1334,6 +1334,10 @@ func (p *parser) parseSeqExpr(seq *seqExpr) (any, bool) {
 		if !ok {
 			p.restore(&pt)
 			return nil, false
+		}
+
+		if val == nil {
+			continue
 		}
 
 		vals = append(vals, val)
